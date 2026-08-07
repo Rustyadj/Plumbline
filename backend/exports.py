@@ -1,5 +1,6 @@
-"""Export + import helpers for PLUMBLINE — Excel & PDF recap, AI-assisted xlsx import."""
+"""Export + import helpers for PLUMBLINE — Excel & PDF recap, AI-assisted xlsx/csv import."""
 import io
+import csv
 import json
 import logging
 from typing import List, Dict, Any
@@ -356,4 +357,31 @@ def parse_xlsx_for_import(file_bytes: bytes, max_rows: int = 400) -> List[Dict[s
                     entry["columns"][h] = v
             if entry["columns"]:
                 out.append(entry)
+    return out
+
+
+def parse_csv_for_import(file_bytes: bytes, max_rows: int = 400) -> List[Dict[str, Any]]:
+    """Read a CSV file. First row is treated as header. Skips fully empty rows."""
+    text = file_bytes.decode("utf-8-sig", errors="replace")
+    reader = csv.reader(io.StringIO(text))
+    all_rows = [r for r in reader if any(c.strip() for c in r)]
+    if not all_rows:
+        return []
+    headers = [h.strip() or f"col_{i}" for i, h in enumerate(all_rows[0])]
+    out = []
+    for r_idx, row in enumerate(all_rows[1:max_rows + 1], start=2):
+        entry = {"sheet": "csv", "row": r_idx, "columns": {}}
+        for h, v in zip(headers, row):
+            v = (v or "").strip()
+            if v:
+                # Coerce to number if numeric
+                try:
+                    if "." in v:
+                        entry["columns"][h] = float(v)
+                    else:
+                        entry["columns"][h] = int(v)
+                except ValueError:
+                    entry["columns"][h] = v
+        if entry["columns"]:
+            out.append(entry)
     return out

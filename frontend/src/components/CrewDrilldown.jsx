@@ -29,7 +29,7 @@ export default function CrewDrilldown({ jobId, crewName, onClose }) {
           ) : !data.found ? (
             <div className="k-surface p-8 text-center">
               <div className="font-display font-bold uppercase text-xl text-[#A1A1AA] mb-2">No entries yet</div>
-              <div className="text-sm text-[#A1A1AA]">{crewName} hasn't logged production on this job.</div>
+              <div className="text-sm text-[#A1A1AA]">{crewName} hasn&apos;t logged production on this job.</div>
             </div>
           ) : (
             <>

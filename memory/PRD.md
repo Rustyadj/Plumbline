@@ -27,19 +27,17 @@ User uploaded `Walls Abilene Intermediate SS.xlsx` (a sprawling, error-laden ICF
 - Command Dashboard: 4 hero metric tiles, status bars, validation pass-rate, 7-day production trend, hours-by-phase Est-vs-Actual, rework list, crew on site.
 - Tasks · AI Rules screen (manager): generate AI validation suggestions, approve/reject, add manual rules, "requires photo" flag.
 
-### ROI / Iteration-2 polish
-- **Rework Cost Saver** hero tile on dashboard: live `$X protected` calculation with caught/photos/saved chips.
-- **30-day cumulative ROI trendline** (yellow AreaChart with gradient) shows month-over-month value protected.
-- **Foreman Leaderboard** on dashboard: ranks crew by validation score (pass_rate × 100 + log(catches+1)×12 + log(photos+1)×6). Top 3 get medal colors.
-- **PLUMBLINE rebrand**: app name, root API response, all UI surfaces.
+### ROI + Rebrand (iteration 2)
+- **PLUMBLINE rebrand** — "Build to the plumbline. Zero rework."
+- **Rework Cost Saver** hero tile with live `$X protected` + 30-day cumulative area chart.
+- **Foreman Leaderboard** on dashboard (top 3 get medals; score = pass_rate×100 + log(catches+1)×12 + log(photos+1)×6).
+- **Super Admin** (manager-only): ROI Settings, Jobs CRUD, Tasks CRUD, Common Mistakes, Danger Zone reset/reseed.
 
-### Super Admin (iteration 2)
-Manager-only tab with 5 sections:
-1. **ROI Settings** — Edit cost-per-check ($), photo audit value ($), company name, AI model. Persisted in settings collection; dashboard recomputes live on next render.
-2. **Jobs** — Full CRUD (create / inline-edit / delete with cascade).
-3. **Tasks** — Full CRUD with search/filter, edit name/category/course/unit/estimated hrs/qty, add new, delete with cascade (validation steps + entries).
-4. **Common Mistakes** — Library CRUD grouped by category.
-5. **Danger Zone** — One-click reset & reseed (preserves settings).
+### Multi-Job + Export + Drilldown + Import (iteration 3)
+- **Multi-Job Nav** — Job switcher in Shell header dropdown, selected job persisted in localStorage.
+- **Crew Drilldown** — Click any leaderboard row (or crew chip) → modal with hours, entries, pass-rate, catches, 14-day activity area chart, top-tasks bar breakdown, last 25 entries with task names + photos count.
+- **Excel + PDF Export** — Buttons on Command dashboard. Excel is a 4-sheet styled workbook (Recap KPIs / Tasks / Leaderboard / Entries). PDF is a clean executive report (`reportlab`) with KPI tiles, validation stats, leaderboard, tasks-by-phase, rework hotlist.
+- **AI-Assisted Import (CSV & Excel)** — SuperAdmin → Jobs → "Import CSV / Excel" button. Upload any spreadsheet, Claude Sonnet 4.6 maps rows to PLUMBLINE's task schema (category, course, unit, estimates) and creates a new Job + default validation steps. Handles both .csv (native `csv` module) and .xlsx (`openpyxl`).
 
 ## Endpoints
 - Health: `GET /api/`

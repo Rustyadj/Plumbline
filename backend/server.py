@@ -18,7 +18,7 @@ from datetime import datetime, timezone, timedelta
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 from seed_tasks import TASK_TEMPLATES, DEFAULT_VALIDATION_STEPS, COMMON_MISTAKES
-from exports import build_recap_xlsx, build_recap_pdf, parse_xlsx_for_import
+from exports import build_recap_xlsx, build_recap_pdf, parse_xlsx_for_import, parse_csv_for_import
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -943,23 +943,27 @@ class ImportXlsxRequest(BaseModel):
     client: str = ""
 
 
-@api_router.post("/admin/import-xlsx")
-async def import_xlsx(
+@api_router.post("/admin/import-file")
+async def import_file(
     name: str,
     file: UploadFile = File(...),
     location: str = "",
     client: str = "",
 ):
-    """Parse an uploaded xlsx, ask Claude to map rows -> PLUMBLINE task schema,
+    """Parse an uploaded xlsx OR csv, ask Claude to map rows -> PLUMBLINE task schema,
     then create a new Job + Tasks + default validation steps.
     """
     content = await file.read()
+    filename = (file.filename or "").lower()
     try:
-        rows = parse_xlsx_for_import(content, max_rows=350)
+        if filename.endswith(".csv") or file.content_type == "text/csv":
+            rows = parse_csv_for_import(content, max_rows=350)
+        else:
+            rows = parse_xlsx_for_import(content, max_rows=350)
     except Exception as e:
-        raise HTTPException(400, f"Could not parse xlsx: {e}")
+        raise HTTPException(400, f"Could not parse file: {e}")
     if not rows:
-        raise HTTPException(400, "No data rows found in spreadsheet")
+        raise HTTPException(400, "No data rows found in file")
 
     # Build a compact prompt — send rows in chunks of 60 to keep token usage reasonable
     CHUNK = 60

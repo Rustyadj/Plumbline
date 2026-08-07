@@ -8,6 +8,7 @@ import CrewDrilldown from "@/components/CrewDrilldown";
 export default function Dashboard({ job }) {
   const [data, setData] = React.useState(null);
   const [tick, setTick] = React.useState(0);
+  const [drilldown, setDrilldown] = React.useState(null);
 
   React.useEffect(() => {
     const load = async () => {
@@ -44,6 +45,30 @@ export default function Dashboard({ job }) {
 
   return (
     <div data-testid="dashboard-view" className="space-y-6">
+      {/* Header with Export buttons */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <div className="text-[10px] uppercase tracking-widest text-[#A1A1AA] font-semibold">Command Dashboard</div>
+          <h1 className="font-display font-black text-2xl md:text-3xl uppercase tracking-tight">{job?.name}</h1>
+        </div>
+        <div className="flex gap-2">
+          <a
+            data-testid="export-xlsx"
+            href={`${API}/jobs/${job?.id}/export/xlsx`}
+            className="k-btn"
+          >
+            <FileSpreadsheet className="w-4 h-4" /> Excel
+          </a>
+          <a
+            data-testid="export-pdf"
+            href={`${API}/jobs/${job?.id}/export/pdf`}
+            className="k-btn"
+          >
+            <FileText className="w-4 h-4" /> PDF
+          </a>
+        </div>
+      </div>
+
       {/* Rework Cost Saver — the ROI story */}
       <div data-testid="rework-cost-saver" className="k-surface relative overflow-hidden">
         {/* accent stripe */}
@@ -195,7 +220,12 @@ export default function Dashboard({ job }) {
               const medal = idx === 0 ? "text-[#CCFF00]" : idx === 1 ? "text-[#A1A1AA]" : idx === 2 ? "text-[#FF5F15]" : "text-[#52525B]";
               const passColor = p.pass_rate >= 0.95 ? "text-[#CCFF00]" : p.pass_rate >= 0.8 ? "text-[#F59E0B]" : "text-[#FF5F15]";
               return (
-                <div key={p.name} data-testid={`lb-row-${idx}`} className="k-surface-2 p-3 flex items-center gap-4">
+                <button
+                  key={p.name}
+                  data-testid={`lb-row-${idx}`}
+                  onClick={() => setDrilldown(p.name)}
+                  className="k-surface-2 p-3 flex items-center gap-4 w-full text-left hover:border-[#FF5F15] transition-colors"
+                >
                   <div className={`font-display font-black text-3xl w-10 text-center ${medal}`}>{idx + 1}</div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -219,7 +249,7 @@ export default function Dashboard({ job }) {
                     <div className="text-[10px] uppercase tracking-widest text-[#A1A1AA]">Score</div>
                     <div className="font-display font-black text-2xl text-[#FAFAFA]">{p.score}</div>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -259,12 +289,14 @@ export default function Dashboard({ job }) {
           ) : (
             <div className="flex flex-wrap gap-2 mt-4">
               {active_crew.map((c) => (
-                <div key={c} className="k-surface-2 px-3 py-2 text-sm font-medium">{c}</div>
+                <button key={c} onClick={() => setDrilldown(c)} data-testid={`crew-chip-${c}`} className="k-surface-2 px-3 py-2 text-sm font-medium hover:border-[#FF5F15] transition-colors">{c}</button>
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {drilldown && <CrewDrilldown jobId={job.id} crewName={drilldown} onClose={() => setDrilldown(null)} />}
     </div>
   );
 }
