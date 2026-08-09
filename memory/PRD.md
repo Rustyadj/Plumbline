@@ -39,6 +39,14 @@ User uploaded `Walls Abilene Intermediate SS.xlsx` (a sprawling, error-laden ICF
 - **Excel + PDF Export** — Buttons on Command dashboard. Excel is a 4-sheet styled workbook (Recap KPIs / Tasks / Leaderboard / Entries). PDF is a clean executive report (`reportlab`) with KPI tiles, validation stats, leaderboard, tasks-by-phase, rework hotlist.
 - **AI-Assisted Import (CSV & Excel)** — SuperAdmin → Jobs → "Import CSV / Excel" button. Upload any spreadsheet, Claude Sonnet 4.6 maps rows to PLUMBLINE's task schema (category, course, unit, estimates) and creates a new Job + default validation steps. Handles both .csv (native `csv` module) and .xlsx (`openpyxl`).
 
+### Offline Mode (iteration 4)
+- **Task + validation-step caching** in localStorage per job/task on every online load, so the field crew can open PLUMBLINE with no signal and still see their tasks + checklists.
+- **Offline queue** for TaskEntry POSTs — when submit fires while offline (or an API call fails mid-submit), the entry is stored locally with all validations, notes, and photos. No lost data.
+- **Auto-sync** on `online` event fires the queue at the backend; also runs 800ms after boot to catch pending items from previous sessions.
+- **Live status banner** at top of Shell — orange when offline (with pending count), amber when online with pending, flash green after successful sync.
+- **Submit button** dynamically changes to "Queue Entry (Offline)" with a WifiOff icon when the crew is offline.
+- **Quota safety** — if localStorage fills up, the helper drops photos from queued entries before losing the entry data itself.
+
 ## Endpoints
 - Health: `GET /api/`
 - Jobs: `GET/POST /api/jobs`, `GET/PATCH/DELETE /api/jobs/{id}`

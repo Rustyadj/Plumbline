@@ -1,6 +1,7 @@
 import React from "react";
 import { LogOut, ChevronDown, Check } from "lucide-react";
 import { apiClient } from "@/App";
+import OfflineBanner from "@/components/OfflineBanner";
 
 export default function Shell({ view, onChangeView, role, crewName, job, onLogout, onJobChange, children }) {
   const [jobs, setJobs] = React.useState([]);
@@ -28,6 +29,7 @@ export default function Shell({ view, onChangeView, role, crewName, job, onLogou
 
   return (
     <div className="min-h-screen bg-[#09090B] text-[#FAFAFA]">
+      <OfflineBanner />
       <header className="border-b border-[#3F3F46] bg-[#09090B]/95 backdrop-blur sticky top-0 z-30">
         <div className="max-w-[1600px] mx-auto px-4 md:px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-baseline gap-3">

@@ -1,6 +1,7 @@
 import React from "react";
 import { apiClient } from "@/App";
-import { Camera, Check, X, ChevronRight, Search, AlertTriangle, Sparkles } from "lucide-react";
+import { Camera, Check, X, ChevronRight, Search, AlertTriangle, Sparkles, WifiOff } from "lucide-react";
+import { isOnline, cacheTasks, getCachedTasks, cacheSteps, getCachedSteps, enqueueEntry } from "@/lib/offline";
 
 const STATUS_LABEL = {
   not_started: "Not Started",
@@ -20,8 +21,18 @@ export default function FieldView({ job, crewName, role }) {
 
   const load = React.useCallback(async () => {
     if (!job) return;
-    const r = await apiClient.get(`/jobs/${job.id}/tasks`);
-    setTasks(r.data);
+    if (isOnline()) {
+      try {
+        const r = await apiClient.get(`/jobs/${job.id}/tasks`);
+        setTasks(r.data);
+        cacheTasks(job.id, r.data);
+        return;
+      } catch (e) {
+        // fall through to cache
+      }
+    }
+    const cached = getCachedTasks(job.id);
+    if (cached?.tasks) setTasks(cached.tasks);
   }, [job]);
 
   React.useEffect(() => { load(); }, [load]);
@@ -176,10 +187,21 @@ function TaskSheet({ task, crewName, role, onClose, onSaved }) {
 
   React.useEffect(() => {
     (async () => {
-      const r1 = await apiClient.get(`/tasks/${task.id}/validation-steps`);
-      setSteps(r1.data);
-      const r2 = await apiClient.get(`/tasks/${task.id}/entries`);
-      setEntries(r2.data);
+      if (isOnline()) {
+        try {
+          const r1 = await apiClient.get(`/tasks/${task.id}/validation-steps`);
+          setSteps(r1.data);
+          cacheSteps(task.id, r1.data);
+          const r2 = await apiClient.get(`/tasks/${task.id}/entries`);
+          setEntries(r2.data);
+          return;
+        } catch (e) {
+          // fall through to cache
+        }
+      }
+      const cached = getCachedSteps(task.id);
+      if (cached?.steps) setSteps(cached.steps);
+      // entries won't be cached offline; leave empty
     })();
   }, [task.id]);
 
@@ -232,17 +254,42 @@ function TaskSheet({ task, crewName, role, onClose, onSaved }) {
           timestamp: new Date().toISOString(),
         };
       });
-      await apiClient.post(`/tasks/${task.id}/entries`, {
+      const payload = {
         crew_member: crewName,
         role: r,
         hours: parseFloat(hours) || 0,
         qty_completed: parseFloat(qty) || 0,
         notes,
         validations,
-      });
+      };
+      if (isOnline()) {
+        await apiClient.post(`/tasks/${task.id}/entries`, payload);
+      } else {
+        enqueueEntry(task.id, payload);
+        window.dispatchEvent(new Event("plumbline:queue-updated"));
+      }
       onSaved();
     } catch (e) {
-      alert("Save failed: " + (e.response?.data?.detail || e.message));
+      // Network error mid-submit → queue instead of losing data
+      const payload = {
+        crew_member: crewName,
+        role: r,
+        hours: parseFloat(hours) || 0,
+        qty_completed: parseFloat(qty) || 0,
+        notes,
+        validations: approvedSteps.map((s) => {
+          const v = vstate[s.id] || {};
+          return {
+            step_id: s.id, description: s.description, status: v.status || "skipped",
+            photo_b64: v.photo_b64 || null, fix_notes: v.fix_notes || null,
+            timestamp: new Date().toISOString(),
+          };
+        }),
+      };
+      enqueueEntry(task.id, payload);
+      window.dispatchEvent(new Event("plumbline:queue-updated"));
+      alert("No signal — entry queued locally. It'll sync when you're back online.");
+      onSaved();
     }
     setSaving(false);
   };
@@ -451,7 +498,7 @@ function TaskSheet({ task, crewName, role, onClose, onSaved }) {
             disabled={saving}
             className="k-btn k-btn-primary k-btn-lg w-full"
           >
-            {saving ? "Saving…" : allRequiredOK ? "Submit & Validate ✓" : "Submit (Partial)"}
+            {saving ? "Saving…" : !isOnline() ? (<><WifiOff className="w-4 h-4" /> Queue Entry (Offline)</>) : allRequiredOK ? "Submit & Validate ✓" : "Submit (Partial)"}
           </button>
         </div>
       </div>
