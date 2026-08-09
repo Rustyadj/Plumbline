@@ -490,7 +490,7 @@ function ImportDialog({ onClose, onDone }) {
   const [search, setSearch] = React.useState("");
   const [commitResult, setCommitResult] = React.useState(null);
 
-  const upload = async (f) => {
+  const upload = async (f, overrides = {}) => {
     if (!f) return;
     setFile(f);
     setError(null);
@@ -498,7 +498,12 @@ function ImportDialog({ onClose, onDone }) {
     try {
       const fd = new FormData();
       fd.append("file", f);
-      const r = await fetch(`${API}/admin/import/preview`, { method: "POST", body: fd });
+      const qs = new URLSearchParams();
+      if (overrides.task_col) qs.set("task_col", overrides.task_col);
+      if (overrides.hours_col) qs.set("hours_col", overrides.hours_col);
+      if (overrides.qty_col) qs.set("qty_col", overrides.qty_col);
+      const qstr = qs.toString();
+      const r = await fetch(`${API}/admin/import/preview${qstr ? "?" + qstr : ""}`, { method: "POST", body: fd });
       if (!r.ok) throw new Error(await r.text());
       const data = await r.json();
       setPreview(data);
@@ -510,6 +515,8 @@ function ImportDialog({ onClose, onDone }) {
     }
     setLoading(false);
   };
+
+  const reparse = async (overrides) => upload(file, overrides);
 
   const onFileChange = (e) => upload(e.target.files?.[0]);
   const onDrop = (e) => {
@@ -627,6 +634,9 @@ function ImportDialog({ onClose, onDone }) {
               <Kpi label="Est. Hours" value={preview.tasks.filter((_, i) => selected.has(i)).reduce((a, t) => a + (t.estimated_hours || 0), 0).toFixed(0)} />
             </div>
 
+            {/* Column Override */}
+            <ColumnOverride preview={preview} onOverride={reparse} loading={loading} />
+
             {/* Job info + filters */}
             <div className="border-b border-[#27272A] p-4 grid grid-cols-1 md:grid-cols-4 gap-3 flex-shrink-0">
               <div>
@@ -743,6 +753,103 @@ function Kpi({ label, value, tone, testid }) {
     <div data-testid={testid}>
       <div className="text-[10px] uppercase tracking-widest text-[#A1A1AA] font-semibold">{label}</div>
       <div className={`font-display font-black text-2xl ${tone || "text-[#FAFAFA]"}`}>{value}</div>
+    </div>
+  );
+}
+
+/* ── COLUMN OVERRIDE ─────────────────────────────────────────── */
+function ColumnOverride({ preview, onOverride, loading }) {
+  const sheetNames = React.useMemo(() => Object.keys(preview.sheets || {}), [preview]);
+  const [sheet, setSheet] = React.useState(sheetNames[0] || "");
+  const detected = preview.detected_columns?.[sheet] || {};
+  const cols = preview.sheets?.[sheet] || [];
+
+  const [taskCol, setTaskCol] = React.useState(detected.task_column || "");
+  const [hoursCol, setHoursCol] = React.useState(detected.hours_column || "");
+  const [qtyCol, setQtyCol] = React.useState(detected.qty_column || "");
+  const [expanded, setExpanded] = React.useState(false);
+
+  // reset when sheet changes
+  React.useEffect(() => {
+    const d = preview.detected_columns?.[sheet] || {};
+    setTaskCol(d.task_column || "");
+    setHoursCol(d.hours_column || "");
+    setQtyCol(d.qty_column || "");
+  }, [sheet, preview]);
+
+  const apply = () => {
+    onOverride({
+      task_col: taskCol || undefined,
+      hours_col: hoursCol || undefined,
+      qty_col: qtyCol || undefined,
+    });
+  };
+
+  return (
+    <div className="border-b border-[#27272A] flex-shrink-0" data-testid="column-override">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full px-4 py-2.5 flex items-center justify-between hover:bg-[#18181B] transition-colors"
+        data-testid="column-override-toggle"
+      >
+        <div className="flex items-center gap-2 text-xs">
+          <Sparkles className="w-3.5 h-3.5 text-[#CCFF00]" />
+          <span className="uppercase tracking-widest font-semibold text-[#A1A1AA]">Detected Columns</span>
+          <span className="font-mono text-[#FAFAFA]">
+            Task: <b className="text-[#CCFF00]">{detected.task_column || "—"}</b>
+            <span className="text-[#71717A]"> · Hrs: </span><b>{detected.hours_column || "—"}</b>
+            <span className="text-[#71717A]"> · Qty: </span><b>{detected.qty_column || "—"}</b>
+          </span>
+        </div>
+        <span className="text-[10px] uppercase tracking-widest text-[#FF5F15]">
+          {expanded ? "Hide" : "Wrong? Override →"}
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="p-4 border-t border-[#27272A] bg-[#0C0C0F] space-y-3">
+          {sheetNames.length > 1 && (
+            <div>
+              <label className="text-[10px] uppercase tracking-widest text-[#A1A1AA] block mb-1 font-semibold">Sheet</label>
+              <select data-testid="override-sheet" className="k-select !py-2 !text-sm" value={sheet} onChange={(e) => setSheet(e.target.value)}>
+                {sheetNames.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <ColPicker testid="override-task" label="Task Name Column *" value={taskCol} onChange={setTaskCol} cols={cols} />
+            <ColPicker testid="override-hours" label="Hours Column" value={hoursCol} onChange={setHoursCol} cols={cols} allowNone />
+            <ColPicker testid="override-qty" label="Quantity Column" value={qtyCol} onChange={setQtyCol} cols={cols} allowNone />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              data-testid="override-apply"
+              onClick={apply}
+              disabled={loading || !taskCol}
+              className="k-btn k-btn-primary text-xs"
+            >
+              <RotateCcw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+              {loading ? "Reparsing…" : "Reparse with these columns"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ColPicker({ testid, label, value, onChange, cols, allowNone }) {
+  return (
+    <div>
+      <label className="text-[10px] uppercase tracking-widest text-[#A1A1AA] block mb-1 font-semibold">{label}</label>
+      <select data-testid={testid} className="k-select !py-2 !text-sm" value={value} onChange={(e) => onChange(e.target.value)}>
+        {allowNone && <option value="">— None —</option>}
+        {!allowNone && !value && <option value="">Pick a column…</option>}
+        {cols.map((c) => {
+          const samples = c.samples.length ? ` — ${c.samples.slice(0, 2).join(" / ")}` : "";
+          return <option key={c.index} value={c.header}>{c.header}{samples}</option>;
+        })}
+      </select>
     </div>
   );
 }

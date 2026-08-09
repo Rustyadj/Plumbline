@@ -956,18 +956,29 @@ class ImportCommitRequest(BaseModel):
 
 
 @api_router.post("/admin/import/preview")
-async def import_preview(file: UploadFile = File(...)):
+async def import_preview(
+    file: UploadFile = File(...),
+    task_col: Optional[str] = None,
+    hours_col: Optional[str] = None,
+    qty_col: Optional[str] = None,
+):
     """Parse a CSV or XLSX and return the deterministic task mapping — no DB writes.
 
-    Response: {tasks, stats, detected_columns}
+    Optional query params `task_col`, `hours_col`, `qty_col` override auto-detection with a specific column header name.
+    Response: {tasks, stats, detected_columns, sheets}
     """
     content = await file.read()
     try:
-        result = parse_and_map_tasks(content, file.filename or "", max_tasks=1000)
+        result = parse_and_map_tasks(
+            content, file.filename or "", max_tasks=1000,
+            task_col_override=task_col,
+            hours_col_override=hours_col,
+            qty_col_override=qty_col,
+        )
     except Exception as e:
         raise HTTPException(400, f"Could not parse file: {e}")
     if not result["tasks"]:
-        raise HTTPException(400, "No task rows found in file. Check the file has task descriptions in one column.")
+        raise HTTPException(400, "No task rows found in file. Try picking a different Task Name column.")
     return result
 
 

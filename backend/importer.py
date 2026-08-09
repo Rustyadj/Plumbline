@@ -289,11 +289,17 @@ def _sheet_rows_from_csv(file_bytes: bytes) -> List[Tuple[str, List[str], List[L
     return [("csv", headers, data_rows)]
 
 
-def parse_and_map_tasks(file_bytes: bytes, filename: str, max_tasks: int = 500) -> Dict[str, Any]:
-    """Deterministically parse a CSV or XLSX and return {tasks: [...], stats: {...}, columns: {...}}.
+def parse_and_map_tasks(
+    file_bytes: bytes,
+    filename: str,
+    max_tasks: int = 500,
+    task_col_override: Optional[str] = None,
+    hours_col_override: Optional[str] = None,
+    qty_col_override: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Deterministically parse a CSV or XLSX and return {tasks, stats, columns, sheets}.
 
-    No LLM required. Same task shape as PLUMBLINE expects:
-    {name, category, course, unit, estimated_hours, estimated_qty}
+    If any *_override is provided, that column header is used instead of auto-detect.
     """
     filename = (filename or "").lower()
     if filename.endswith(".csv"):
@@ -303,16 +309,49 @@ def parse_and_map_tasks(file_bytes: bytes, filename: str, max_tasks: int = 500) 
 
     all_tasks: List[Dict[str, Any]] = []
     detected: Dict[str, Any] = {}
+    all_columns: Dict[str, List[Dict[str, Any]]] = {}
     total_rows_scanned = 0
 
     for sheet_name, headers, rows in sheets:
         if not rows:
             continue
-        task_col = _detect_task_column(headers, rows)
-        hours_col = _detect_hours_column(headers, rows, task_col)
-        qty_col = _detect_qty_column(headers, rows, task_col, hours_col)
+        # Build per-column sample values for the UI picker (first 3 non-empty)
+        col_samples = []
+        for i, h in enumerate(headers):
+            samples = []
+            for row in rows[:60]:
+                if i < len(row):
+                    v = _clean(row[i])
+                    if v and v not in _JUNK_VALUES and v not in samples:
+                        samples.append(v[:40])
+                if len(samples) >= 3:
+                    break
+            col_samples.append({"index": i, "header": h, "samples": samples})
+        all_columns[sheet_name] = col_samples
+
+        # Resolve columns: override wins, else auto-detect
+        def _find_col(name: Optional[str]) -> Optional[int]:
+            if not name:
+                return None
+            for i, h in enumerate(headers):
+                if h == name:
+                    return i
+            return None
+
+        task_col = _find_col(task_col_override)
+        if task_col is None:
+            task_col = _detect_task_column(headers, rows)
+
+        hours_col = _find_col(hours_col_override)
+        if hours_col is None and hours_col_override is None:
+            hours_col = _detect_hours_column(headers, rows, task_col)
+
+        qty_col = _find_col(qty_col_override)
+        if qty_col is None and qty_col_override is None:
+            qty_col = _detect_qty_column(headers, rows, task_col, hours_col)
+
         detected[sheet_name] = {
-            "task_column": headers[task_col] if task_col < len(headers) else f"col_{task_col}",
+            "task_column": headers[task_col] if 0 <= task_col < len(headers) else f"col_{task_col}",
             "hours_column": headers[hours_col] if (hours_col is not None and hours_col < len(headers)) else None,
             "qty_column": headers[qty_col] if (qty_col is not None and qty_col < len(headers)) else None,
         }
@@ -409,4 +448,5 @@ def parse_and_map_tasks(file_bytes: bytes, filename: str, max_tasks: int = 500) 
             "by_category": counts,
         },
         "detected_columns": detected,
+        "sheets": all_columns,
     }
