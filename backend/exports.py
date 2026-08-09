@@ -328,9 +328,41 @@ def build_recap_pdf(job: dict, tasks: list, entries: list, dashboard: dict) -> b
     return buf.getvalue()
 
 
-def parse_xlsx_for_import(file_bytes: bytes, max_rows: int = 400) -> List[Dict[str, Any]]:
+_JUNK_VALUES = {"#REF!", "#DIV/0!", "#N/A", "#VALUE!", "#NAME?", "#NULL!", "#NUM!"}
+
+
+def _looks_like_task_name(v) -> bool:
+    """A cell value that looks like a real task description.
+
+    Heuristic: string, 4+ chars, has at least one letter, not an Excel error,
+    and not obviously a header/section label.
+    """
+    if not isinstance(v, str):
+        return False
+    s = v.strip()
+    if len(s) < 4:
+        return False
+    if s in _JUNK_VALUES:
+        return False
+    if not any(c.isalpha() for c in s):
+        return False
+    lowered = s.lower()
+    # Skip obvious summary / header words
+    JUNK_TOKENS = {"total", "subtotal", "week ending", "job number", "recap",
+                   "installer hrs", "apprentice hrs", "foreman", "laborer",
+                   "hours", "actual", "estimated", "ratio", "spent", "earned",
+                   "labor hrs", "over/under", "unnamed"}
+    if lowered in JUNK_TOKENS:
+        return False
+    return True
+
+
+def parse_xlsx_for_import(file_bytes: bytes, max_rows: int = 200) -> List[Dict[str, Any]]:
     """Read an xlsx file and return rows of {row_idx, sheet, columns: {header: value}}.
-    Tries to detect a header row, then yields all data rows below it.
+
+    Aggressive filtering: only keeps rows that contain at least one cell that
+    looks like a real construction task name. Drops #REF!/#DIV/0! junk, summary
+    rows, and obviously non-task metadata. Caps at max_rows to keep LLM cost sane.
     """
     wb = load_workbook(io.BytesIO(file_bytes), data_only=True)
     out = []
@@ -339,7 +371,7 @@ def parse_xlsx_for_import(file_bytes: bytes, max_rows: int = 400) -> List[Dict[s
         rows = list(ws.iter_rows(values_only=True))
         if not rows:
             continue
-        # Find header row — first row with >=3 non-empty cells, prefer earlier
+        # Find header row — first row with >=3 non-empty cells
         header_idx = 0
         for idx, row in enumerate(rows[:20]):
             non_empty = sum(1 for c in row if c not in (None, ""))
@@ -347,16 +379,25 @@ def parse_xlsx_for_import(file_bytes: bytes, max_rows: int = 400) -> List[Dict[s
                 header_idx = idx
                 break
         headers = [str(c).strip() if c else f"col_{i}" for i, c in enumerate(rows[header_idx])]
-        for r_idx, row in enumerate(rows[header_idx + 1:][:max_rows], start=header_idx + 2):
-            non_empty = sum(1 for c in row if c not in (None, ""))
-            if non_empty < 1:
-                continue
-            entry = {"sheet": sheet_name, "row": r_idx, "columns": {}}
+        for r_idx, row in enumerate(rows[header_idx + 1:], start=header_idx + 2):
+            if len(out) >= max_rows:
+                break
+            # Filter cell values: strip junk
+            filtered = {}
+            has_task_name = False
             for h, v in zip(headers, row):
-                if v not in (None, ""):
-                    entry["columns"][h] = v
-            if entry["columns"]:
-                out.append(entry)
+                if v in (None, ""):
+                    continue
+                if isinstance(v, str) and v.strip() in _JUNK_VALUES:
+                    continue
+                filtered[h] = v
+                if _looks_like_task_name(v):
+                    has_task_name = True
+            if not has_task_name:
+                continue
+            out.append({"sheet": sheet_name, "row": r_idx, "columns": filtered})
+        if len(out) >= max_rows:
+            break
     return out
 
 

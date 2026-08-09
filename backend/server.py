@@ -968,6 +968,7 @@ async def import_file(
     # Build a compact prompt — send rows in chunks of 60 to keep token usage reasonable
     CHUNK = 60
     all_mapped = []
+    last_error = None
     for chunk_start in range(0, len(rows), CHUNK):
         chunk = rows[chunk_start : chunk_start + CHUNK]
         # serialize each row as: "row N (sheet): col1=val1; col2=val2"
@@ -994,10 +995,18 @@ async def import_file(
             parsed = json.loads(raw[start : end + 1])
             all_mapped.extend(parsed.get("tasks", []))
         except Exception as e:
+            last_error = str(e)
             logging.exception(f"chunk {chunk_start} failed: {e}")
 
     if not all_mapped:
-        raise HTTPException(500, "AI could not map any rows to tasks")
+        # Surface the underlying LLM/budget error so the user knows why
+        if last_error and "budget" in last_error.lower():
+            raise HTTPException(
+                402,
+                "AI budget exceeded on your Emergent Universal Key. "
+                "Top up at Profile → Manage Plan → Universal Key → Add Balance, then retry.",
+            )
+        raise HTTPException(500, f"AI could not map any rows to tasks. Last error: {last_error or 'unknown'}")
 
     # Create job + tasks
     job = Job(name=name, location=location, client=client, status="active")
