@@ -19,6 +19,7 @@ from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 from seed_tasks import TASK_TEMPLATES, DEFAULT_VALIDATION_STEPS, COMMON_MISTAKES
 from exports import build_recap_xlsx, build_recap_pdf, parse_xlsx_for_import, parse_csv_for_import
+from importer import parse_and_map_tasks
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -936,114 +937,86 @@ async def export_pdf(job_id: str):
     )
 
 
-# ── EXCEL IMPORT (AI-assisted) ─────────────────────────────────────
-class ImportXlsxRequest(BaseModel):
+# ── DETERMINISTIC IMPORT (NO AI) ───────────────────────────────────
+class ImportedTask(BaseModel):
+    name: str
+    category: str = "Other"
+    course: str = "all"
+    unit: Optional[str] = None
+    estimated_hours: Optional[float] = None
+    estimated_qty: Optional[float] = None
+
+
+class ImportCommitRequest(BaseModel):
     name: str
     location: str = ""
     client: str = ""
+    budget_hours: float = 0.0
+    tasks: List[ImportedTask]
 
 
-@api_router.post("/admin/import-file")
-async def import_file(
-    name: str,
-    file: UploadFile = File(...),
-    location: str = "",
-    client: str = "",
-):
-    """Parse an uploaded xlsx OR csv, ask Claude to map rows -> PLUMBLINE task schema,
-    then create a new Job + Tasks + default validation steps.
+@api_router.post("/admin/import/preview")
+async def import_preview(file: UploadFile = File(...)):
+    """Parse a CSV or XLSX and return the deterministic task mapping — no DB writes.
+
+    Response: {tasks, stats, detected_columns}
     """
     content = await file.read()
-    filename = (file.filename or "").lower()
     try:
-        if filename.endswith(".csv") or file.content_type == "text/csv":
-            rows = parse_csv_for_import(content, max_rows=350)
-        else:
-            rows = parse_xlsx_for_import(content, max_rows=350)
+        result = parse_and_map_tasks(content, file.filename or "", max_tasks=1000)
     except Exception as e:
         raise HTTPException(400, f"Could not parse file: {e}")
-    if not rows:
-        raise HTTPException(400, "No data rows found in file")
+    if not result["tasks"]:
+        raise HTTPException(400, "No task rows found in file. Check the file has task descriptions in one column.")
+    return result
 
-    # Build a compact prompt — send rows in chunks of 60 to keep token usage reasonable
-    CHUNK = 60
-    all_mapped = []
-    last_error = None
-    for chunk_start in range(0, len(rows), CHUNK):
-        chunk = rows[chunk_start : chunk_start + CHUNK]
-        # serialize each row as: "row N (sheet): col1=val1; col2=val2"
-        rows_text = "\n".join(
-            f"row {r['row']} ({r['sheet']}): "
-            + "; ".join(f"{k}={str(v)[:80]}" for k, v in r["columns"].items())
-            for r in chunk
-        )
-        system_msg = (
-            "You are mapping rows from an ICF construction production spreadsheet to a normalized task schema. "
-            "Allowed categories: Precon, Startup, Layout, Install, Rebar, Pour, Strip, Cleanup, Other. "
-            "Allowed courses: all, 1st, 2nd, 3rd, 4th, 5th. "
-            "Allowed units: LF, SF, EA, HRS, %, null. "
-            "Skip rows that are headers, totals, footers, employee names, or metadata (not actual construction tasks). "
-            "Output ONLY valid JSON: {\"tasks\":[{\"name\":\"...\",\"category\":\"...\",\"course\":\"...\","
-            "\"unit\":\"LF|SF|EA|HRS|%|null\",\"estimated_hours\":number_or_null,\"estimated_qty\":number_or_null}]}"
-        )
-        user_msg = f"Map these rows to tasks:\n\n{rows_text}"
-        try:
-            raw = await llm_chat(system_msg, user_msg, f"import-{uuid.uuid4()}")
-            start, end = raw.find("{"), raw.rfind("}")
-            if start == -1 or end == -1:
-                continue
-            parsed = json.loads(raw[start : end + 1])
-            all_mapped.extend(parsed.get("tasks", []))
-        except Exception as e:
-            last_error = str(e)
-            logging.exception(f"chunk {chunk_start} failed: {e}")
 
-    if not all_mapped:
-        # Surface the underlying LLM/budget error so the user knows why
-        if last_error and "budget" in last_error.lower():
-            raise HTTPException(
-                402,
-                "AI budget exceeded on your Emergent Universal Key. "
-                "Top up at Profile → Manage Plan → Universal Key → Add Balance, then retry.",
-            )
-        raise HTTPException(500, f"AI could not map any rows to tasks. Last error: {last_error or 'unknown'}")
+@api_router.post("/admin/import/commit")
+async def import_commit(payload: ImportCommitRequest):
+    """Create a new Job + the provided tasks + default validation steps for each."""
+    if not payload.name.strip():
+        raise HTTPException(400, "Job name is required")
+    if not payload.tasks:
+        raise HTTPException(400, "No tasks to import")
 
-    # Create job + tasks
-    job = Job(name=name, location=location, client=client, status="active")
+    job = Job(
+        name=payload.name.strip(),
+        location=payload.location,
+        client=payload.client,
+        status="active",
+        budget_hours=payload.budget_hours,
+    )
     await db.jobs.insert_one(job.model_dump())
 
-    created_tasks = 0
-    for i, t in enumerate(all_mapped):
-        unit = t.get("unit")
-        if unit in (None, "null", "None", ""):
-            unit = None
-        category = t.get("category", "Other")
-        if category not in ["Precon", "Startup", "Layout", "Install", "Rebar", "Pour", "Strip", "Cleanup", "Other"]:
-            category = "Other"
-        course = t.get("course", "all")
-        if course not in ["all", "1st", "2nd", "3rd", "4th", "5th"]:
-            course = "all"
+    allowed_cats = {"Precon", "Startup", "Layout", "Install", "Rebar", "Pour", "Strip", "Cleanup", "Other"}
+    allowed_courses = {"all", "1st", "2nd", "3rd", "4th", "5th"}
+    allowed_units = {"LF", "SF", "EA", "HRS", "%"}
+
+    created = 0
+    for i, t in enumerate(payload.tasks):
+        cat = t.category if t.category in allowed_cats else "Other"
+        crs = t.course if t.course in allowed_courses else "all"
+        unit = t.unit if t.unit in allowed_units else None
         task = Task(
             job_id=job.id,
-            name=(t.get("name") or "Unnamed task")[:200],
-            category=category,
-            course=course,
+            name=(t.name or "Unnamed task")[:200],
+            category=cat,
+            course=crs,
             unit=unit,
-            estimated_hours=t.get("estimated_hours") if isinstance(t.get("estimated_hours"), (int, float)) else None,
-            estimated_qty=t.get("estimated_qty") if isinstance(t.get("estimated_qty"), (int, float)) else None,
+            estimated_hours=t.estimated_hours,
+            estimated_qty=t.estimated_qty,
             sort_order=i,
         )
         await db.tasks.insert_one(task.model_dump())
-        created_tasks += 1
-        # default validation steps from category
-        for j, (desc, requires_photo) in enumerate(DEFAULT_VALIDATION_STEPS.get(category, [])):
+        created += 1
+        for j, (desc, requires_photo) in enumerate(DEFAULT_VALIDATION_STEPS.get(cat, [])):
             step = ValidationStep(
                 task_id=task.id, description=desc, requires_photo=requires_photo,
                 source="default", approved=True, order=j,
             )
             await db.validation_steps.insert_one(step.model_dump())
 
-    return {"status": "imported", "job_id": job.id, "tasks": created_tasks, "rows_parsed": len(rows)}
+    return {"status": "imported", "job_id": job.id, "tasks": created}
 
 
 # ── REGISTER ───────────────────────────────────────────────────────

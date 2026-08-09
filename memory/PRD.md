@@ -39,7 +39,16 @@ User uploaded `Walls Abilene Intermediate SS.xlsx` (a sprawling, error-laden ICF
 - **Excel + PDF Export** — Buttons on Command dashboard. Excel is a 4-sheet styled workbook (Recap KPIs / Tasks / Leaderboard / Entries). PDF is a clean executive report (`reportlab`) with KPI tiles, validation stats, leaderboard, tasks-by-phase, rework hotlist.
 - **AI-Assisted Import (CSV & Excel)** — SuperAdmin → Jobs → "Import CSV / Excel" button. Upload any spreadsheet, Claude Sonnet 4.6 maps rows to PLUMBLINE's task schema (category, course, unit, estimates) and creates a new Job + default validation steps. Handles both .csv (native `csv` module) and .xlsx (`openpyxl`).
 
-### Offline Mode (iteration 4)
+### Deterministic Import Rebuild (iteration 5) — Zero AI Required
+- **New backend module `/app/backend/importer.py`** — heuristic parser: auto-detects the task-name column, extracts category from keyword matching, extracts course from `1st/2nd/…/5th` prefix, pulls estimated hours + qty from column-header hints (`hrs`, `qty`, `lf`, `sf`, `ea`) or falls back to numeric-scale scanning (smallest = hours, largest = qty). Filters `#REF!`, totals, headers, employee names, and single-word junk.
+- **Two-step API replaces the old AI endpoint**:
+  - `POST /api/admin/import/preview` (multipart file) → returns `{tasks, stats, detected_columns}` — no DB writes
+  - `POST /api/admin/import/commit` (JSON with selected tasks + job info) → creates Job + Tasks + default validation steps
+- **New ImportDialog UX**:
+  - Step 1: giant drag-and-drop zone (browse or drop CSV/XLSX)
+  - Step 2: preview view with 5 KPI tiles (Rows Scanned, Tasks Found, Selected, Categories, Est. Hours), inline job-info form, category filter chips with per-category counts, search, per-row include/exclude checkbox, "Select/Deselect Visible" bulk toggle
+  - Step 3: success confirmation with job name + tasks-created count
+- Performance: your real 872 KB Walls Abilene SS → **586 unique tasks parsed in ~500ms** (was 3,141 → dumped junk, no LLM calls, zero cost). Categories: Precon 13, Startup 17, Layout 44, Install 210, Rebar 97, Pour 25, Strip 77, Cleanup 34, Other 69.
 - **Task + validation-step caching** in localStorage per job/task on every online load, so the field crew can open PLUMBLINE with no signal and still see their tasks + checklists.
 - **Offline queue** for TaskEntry POSTs — when submit fires while offline (or an API call fails mid-submit), the entry is stored locally with all validations, notes, and photos. No lost data.
 - **Auto-sync** on `online` event fires the queue at the backend; also runs 800ms after boot to catch pending items from previous sessions.

@@ -1,6 +1,6 @@
 import React from "react";
 import { apiClient } from "@/App";
-import { Settings, Database, Briefcase, ListTodo, AlertTriangle, RotateCcw, Save, Plus, Trash2, Edit3, X, Upload, Sparkles } from "lucide-react";
+import { Settings, Database, Briefcase, ListTodo, AlertTriangle, RotateCcw, Save, Plus, Trash2, Edit3, X, Upload, Sparkles, Check } from "lucide-react";
 import { API } from "@/App";
 
 export default function SuperAdmin({ job, onJobChanged }) {
@@ -473,113 +473,276 @@ function Field({ label, hint, children }) {
   );
 }
 
-/* ── IMPORT DIALOG (CSV / Excel + AI mapping) ─────────────────── */
+/* ── IMPORT DIALOG (deterministic CSV/XLSX, no AI, preview + commit) ─── */
 function ImportDialog({ onClose, onDone }) {
+  const [step, setStep] = React.useState("upload"); // upload | preview | committing | done
+  const [file, setFile] = React.useState(null);
+  const [dragOver, setDragOver] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const [preview, setPreview] = React.useState(null); // {tasks, stats, detected_columns}
+  const [selected, setSelected] = React.useState(new Set()); // Set of task indices to include
   const [name, setName] = React.useState("");
   const [location, setLocation] = React.useState("");
   const [client, setClient] = React.useState("");
-  const [file, setFile] = React.useState(null);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState(null);
-  const [result, setResult] = React.useState(null);
+  const [budget, setBudget] = React.useState(0);
+  const [filter, setFilter] = React.useState("All");
+  const [search, setSearch] = React.useState("");
+  const [commitResult, setCommitResult] = React.useState(null);
 
-  const submit = async () => {
+  const upload = async (f) => {
+    if (!f) return;
+    setFile(f);
     setError(null);
-    if (!name.trim()) return setError("Job name is required");
-    if (!file) return setError("Pick a CSV or Excel file");
     setLoading(true);
     try {
       const fd = new FormData();
-      fd.append("file", file);
-      const q = new URLSearchParams({ name, location, client }).toString();
-      const r = await fetch(`${API}/admin/import-file?${q}`, {
-        method: "POST",
-        body: fd,
-      });
-      if (!r.ok) {
-        const t = await r.text();
-        throw new Error(t);
-      }
+      fd.append("file", f);
+      const r = await fetch(`${API}/admin/import/preview`, { method: "POST", body: fd });
+      if (!r.ok) throw new Error(await r.text());
       const data = await r.json();
-      setResult(data);
+      setPreview(data);
+      setSelected(new Set(data.tasks.map((_, i) => i)));
+      if (!name) setName(f.name.replace(/\.(csv|xlsx?|xls)$/i, ""));
+      setStep("preview");
     } catch (e) {
-      setError(e.message || String(e));
+      setError((e.message || "").slice(0, 300));
     }
     setLoading(false);
   };
 
+  const onFileChange = (e) => upload(e.target.files?.[0]);
+  const onDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    upload(e.dataTransfer.files?.[0]);
+  };
+
+  const toggle = (i) => {
+    const next = new Set(selected);
+    next.has(i) ? next.delete(i) : next.add(i);
+    setSelected(next);
+  };
+  const toggleAllInView = (visible, allOn) => {
+    const next = new Set(selected);
+    for (const i of visible) allOn ? next.delete(i) : next.add(i);
+    setSelected(next);
+  };
+
+  const commit = async () => {
+    if (!name.trim()) return setError("Job name is required");
+    if (selected.size === 0) return setError("Select at least one task");
+    setStep("committing");
+    setError(null);
+    try {
+      const chosen = preview.tasks.filter((_, i) => selected.has(i));
+      const r = await apiClient.post("/admin/import/commit", {
+        name: name.trim(),
+        location, client,
+        budget_hours: parseFloat(budget) || 0,
+        tasks: chosen,
+      });
+      setCommitResult(r.data);
+      setStep("done");
+    } catch (e) {
+      setError(e.response?.data?.detail || e.message);
+      setStep("preview");
+    }
+  };
+
+  // Filtering
+  const filteredIdxs = React.useMemo(() => {
+    if (!preview) return [];
+    return preview.tasks
+      .map((t, i) => ({ t, i }))
+      .filter(({ t }) => {
+        if (filter !== "All" && t.category !== filter) return false;
+        if (search && !t.name.toLowerCase().includes(search.toLowerCase())) return false;
+        return true;
+      })
+      .map(({ i }) => i);
+  }, [preview, filter, search]);
+
+  const visibleAllOn = filteredIdxs.length > 0 && filteredIdxs.every((i) => selected.has(i));
+  const cats = preview ? Object.keys(preview.stats.by_category).sort() : [];
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex justify-center items-start md:items-center p-4 overflow-y-auto">
-      <div data-testid="import-dialog" className="bg-[#09090B] border-2 border-[#3F3F46] w-full max-w-lg k-slide-up">
-        <div className="border-b border-[#3F3F46] p-5 flex items-start justify-between gap-4">
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-start justify-center p-0 md:p-4 overflow-y-auto">
+      <div data-testid="import-dialog" className="bg-[#09090B] border-2 border-[#3F3F46] w-full max-w-5xl my-0 md:my-8 flex flex-col max-h-full md:max-h-[92vh] k-slide-up">
+        {/* Header */}
+        <div className="border-b border-[#3F3F46] p-5 flex items-start justify-between gap-4 flex-shrink-0">
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-[#CCFF00] font-bold flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5" /> AI-Assisted Import
-            </div>
-            <h2 className="font-display font-black text-2xl uppercase leading-tight mt-1">Import Tasks from CSV or Excel</h2>
-            <p className="text-xs text-[#A1A1AA] mt-1">Drop in any ICF production spreadsheet. Claude reads it, maps rows to PLUMBLINE&apos;s task schema, and creates a new job.</p>
+            <div className="text-[10px] uppercase tracking-widest text-[#CCFF00] font-bold">Instant Import · No AI Required</div>
+            <h2 className="font-display font-black text-2xl md:text-3xl uppercase leading-tight mt-1">Import Tasks from CSV or Excel</h2>
+            <p className="text-xs text-[#A1A1AA] mt-1">Drop in any spreadsheet — PLUMBLINE reads the task names, auto-categorizes, and pulls estimates. Free, instant, deterministic.</p>
           </div>
-          <button onClick={onClose} className="k-btn p-3"><X className="w-4 h-4" /></button>
+          <button data-testid="import-close" onClick={onClose} className="k-btn p-3"><X className="w-4 h-4" /></button>
         </div>
 
-        {!result ? (
-          <div className="p-5 space-y-4">
-            <div>
-              <label className="text-xs uppercase tracking-widest text-[#A1A1AA] block mb-1.5 font-semibold">Job Name *</label>
-              <input data-testid="import-name" className="k-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Midland School District" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs uppercase tracking-widest text-[#A1A1AA] block mb-1.5 font-semibold">Location</label>
-                <input data-testid="import-location" className="k-input" value={location} onChange={(e) => setLocation(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-xs uppercase tracking-widest text-[#A1A1AA] block mb-1.5 font-semibold">Client</label>
-                <input data-testid="import-client" className="k-input" value={client} onChange={(e) => setClient(e.target.value)} />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs uppercase tracking-widest text-[#A1A1AA] block mb-1.5 font-semibold">CSV or Excel File *</label>
-              <label className="k-photo p-6 block cursor-pointer">
-                <input
-                  type="file"
-                  data-testid="import-file"
-                  accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  onChange={(e) => setFile(e.target.files?.[0])}
-                  className="hidden"
-                />
-                {file ? (
-                  <div className="text-sm text-[#FAFAFA]"><Upload className="inline w-4 h-4 mr-2" />{file.name} · {(file.size / 1024).toFixed(1)} KB</div>
-                ) : (
-                  <div className="flex items-center gap-2 justify-center"><Upload className="w-5 h-5" /><span>Tap to select CSV or .xlsx</span></div>
-                )}
-              </label>
-              <div className="text-[10px] text-[#71717A] mt-2">Any layout works — Claude figures out the columns. Max 350 rows.</div>
-            </div>
+        {/* STEP 1: UPLOAD */}
+        {step === "upload" && (
+          <div className="p-5 md:p-8">
+            <label
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={onDrop}
+              className={`k-photo block cursor-pointer transition-all ${dragOver ? "border-[#CCFF00] bg-[#CCFF00]/5" : ""} !min-h-[240px]`}
+            >
+              <input type="file" data-testid="import-file" accept=".csv,.xlsx,.xls,text/csv"
+                onChange={onFileChange} className="hidden" />
+              {loading ? (
+                <div className="flex items-center gap-3 justify-center py-8">
+                  <RotateCcw className="w-5 h-5 animate-spin" />
+                  <span className="uppercase tracking-widest text-sm">Reading spreadsheet…</span>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Upload className="w-10 h-10 mx-auto mb-3 text-[#FF5F15]" />
+                  <div className="font-display font-bold uppercase text-lg mb-1">Drop CSV or Excel here</div>
+                  <div className="text-sm text-[#A1A1AA]">or tap to browse — .csv, .xlsx, .xls</div>
+                </div>
+              )}
+            </label>
             {error && (
-              <div className="k-surface-2 border-[#FF5F15] p-3 text-sm text-[#FF5F15]" data-testid="import-error">{error}</div>
-            )}
-            <div className="pt-2 border-t border-[#3F3F46]">
-              <button data-testid="import-submit" onClick={submit} disabled={loading} className="k-btn k-btn-primary w-full">
-                {loading ? "Analyzing spreadsheet with AI…" : "Import & Create Job"}
-              </button>
-              <div className="text-[10px] text-center text-[#A1A1AA] mt-2 uppercase tracking-widest">
-                {loading ? "This can take 15–40 seconds depending on size" : "Powered by Claude Sonnet 4.6"}
+              <div className="k-surface-2 border-[#FF5F15] p-3 text-sm text-[#FF5F15] mt-3" data-testid="import-error">
+                {error}
               </div>
+            )}
+            <div className="text-[10px] text-[#71717A] mt-4 text-center leading-relaxed">
+              <b>What PLUMBLINE auto-detects:</b> task name column · category (Precon / Layout / Install / Rebar / Pour / Strip / Cleanup) · course (1st–5th) · estimated hours & quantity · unit (LF / SF / EA / HRS).
+              <br/>Junk rows (totals, headers, employee names, #REF! errors) are skipped automatically.
             </div>
           </div>
-        ) : (
-          <div className="p-5 space-y-4" data-testid="import-success">
-            <div className="text-[#CCFF00] font-display font-black text-3xl">✓ Import Complete</div>
-            <div className="text-sm space-y-1">
-              <div><span className="text-[#A1A1AA]">Rows parsed:</span> <span className="font-mono">{result.rows_parsed}</span></div>
-              <div><span className="text-[#A1A1AA]">Tasks created:</span> <span className="font-mono text-[#CCFF00]">{result.tasks}</span></div>
-              <div><span className="text-[#A1A1AA]">Job ID:</span> <span className="font-mono text-xs">{result.job_id}</span></div>
+        )}
+
+        {/* STEP 2: PREVIEW + SELECT */}
+        {step === "preview" && preview && (
+          <>
+            {/* Stats summary */}
+            <div className="border-b border-[#27272A] p-4 grid grid-cols-2 md:grid-cols-5 gap-3 flex-shrink-0">
+              <Kpi label="Rows Scanned" value={preview.stats.rows_scanned} />
+              <Kpi label="Tasks Found" value={preview.stats.tasks_found} tone="text-[#CCFF00]" />
+              <Kpi label="Selected" value={selected.size} tone="text-[#FF5F15]" testid="preview-selected-count" />
+              <Kpi label="Categories" value={cats.length} />
+              <Kpi label="Est. Hours" value={preview.tasks.filter((_, i) => selected.has(i)).reduce((a, t) => a + (t.estimated_hours || 0), 0).toFixed(0)} />
+            </div>
+
+            {/* Job info + filters */}
+            <div className="border-b border-[#27272A] p-4 grid grid-cols-1 md:grid-cols-4 gap-3 flex-shrink-0">
+              <div>
+                <label className="text-[10px] uppercase tracking-widest text-[#A1A1AA] block mb-1 font-semibold">Job Name *</label>
+                <input data-testid="import-name" className="k-input !py-2" value={name} onChange={(e) => setName(e.target.value)} placeholder="Job name" />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-widest text-[#A1A1AA] block mb-1 font-semibold">Location</label>
+                <input data-testid="import-location" className="k-input !py-2" value={location} onChange={(e) => setLocation(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-widest text-[#A1A1AA] block mb-1 font-semibold">Client</label>
+                <input data-testid="import-client" className="k-input !py-2" value={client} onChange={(e) => setClient(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-widest text-[#A1A1AA] block mb-1 font-semibold">Budget Hrs</label>
+                <input data-testid="import-budget" type="number" className="k-input !py-2" value={budget} onChange={(e) => setBudget(e.target.value)} />
+              </div>
+            </div>
+
+            {/* Category chips + search */}
+            <div className="border-b border-[#27272A] p-3 flex items-center gap-2 flex-wrap flex-shrink-0">
+              <input data-testid="import-search" placeholder="Search…" className="k-input !py-1.5 !text-sm max-w-[180px]" value={search} onChange={(e) => setSearch(e.target.value)} />
+              <button data-testid="import-filter-All" onClick={() => setFilter("All")} className={`k-btn !py-1 !px-2 text-[10px] ${filter === "All" ? "!bg-[#FF5F15] !text-[#09090B] !border-[#FF5F15]" : ""}`}>
+                All · {preview.stats.tasks_found}
+              </button>
+              {cats.map((c) => (
+                <button key={c} data-testid={`import-filter-${c}`} onClick={() => setFilter(c)} className={`k-btn !py-1 !px-2 text-[10px] ${filter === c ? "!bg-[#FF5F15] !text-[#09090B] !border-[#FF5F15]" : ""}`}>
+                  {c} · {preview.stats.by_category[c]}
+                </button>
+              ))}
+              <div className="flex-1" />
+              <button data-testid="import-toggle-all" onClick={() => toggleAllInView(filteredIdxs, visibleAllOn)} className="k-btn !py-1 !px-2 text-[10px]">
+                {visibleAllOn ? "Deselect Visible" : "Select Visible"}
+              </button>
+            </div>
+
+            {/* Task list */}
+            <div className="overflow-y-auto flex-1 min-h-0 p-3 space-y-1">
+              {filteredIdxs.length === 0 && (
+                <div className="text-center py-12 text-[#A1A1AA] text-sm">No tasks match this filter.</div>
+              )}
+              {filteredIdxs.map((i) => {
+                const t = preview.tasks[i];
+                const on = selected.has(i);
+                return (
+                  <button
+                    key={i}
+                    data-testid={`import-task-${i}`}
+                    onClick={() => toggle(i)}
+                    className={`w-full text-left flex items-center gap-3 p-2.5 border transition-colors ${on ? "bg-[#18181B] border-[#3F3F46]" : "bg-transparent border-[#27272A] opacity-50"}`}
+                  >
+                    <div className={`k-check !w-6 !h-6 !min-w-6 ${on ? "pass" : ""}`}>
+                      {on && <Check className="w-4 h-4" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                        <span className="text-[10px] font-mono text-[#FF5F15] uppercase tracking-widest">{t.category}</span>
+                        {t.course !== "all" && <span className="text-[10px] font-mono text-[#A1A1AA] uppercase tracking-widest">{t.course} course</span>}
+                        {t.unit && <span className="text-[10px] font-mono text-[#A1A1AA] tracking-widest">{t.unit}</span>}
+                      </div>
+                      <div className="text-sm font-medium truncate">{t.name}</div>
+                    </div>
+                    <div className="text-right text-[10px] font-mono text-[#A1A1AA] flex-shrink-0">
+                      <div>{t.estimated_hours ? `${t.estimated_hours}h` : "—"}</div>
+                      <div>{t.estimated_qty ? `${t.estimated_qty} ${t.unit || ""}` : "—"}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Footer actions */}
+            <div className="border-t border-[#3F3F46] p-4 flex items-center gap-3 flex-shrink-0">
+              {error && <div className="text-xs text-[#FF5F15] flex-1">{error}</div>}
+              <button className="k-btn" onClick={() => { setStep("upload"); setPreview(null); setSelected(new Set()); setFile(null); }}>← Change File</button>
+              <div className="flex-1" />
+              <button
+                data-testid="import-commit"
+                onClick={commit}
+                className="k-btn k-btn-primary"
+                disabled={selected.size === 0 || !name.trim()}
+              >
+                Create Job with {selected.size} Task{selected.size === 1 ? "" : "s"} →
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === "committing" && (
+          <div className="p-12 text-center">
+            <RotateCcw className="w-8 h-8 mx-auto mb-3 animate-spin text-[#FF5F15]" />
+            <div className="font-display font-bold uppercase text-lg">Creating Job & Tasks…</div>
+          </div>
+        )}
+
+        {step === "done" && commitResult && (
+          <div className="p-8" data-testid="import-success">
+            <div className="text-[#CCFF00] font-display font-black text-4xl mb-2">✓ Import Complete</div>
+            <div className="text-sm space-y-1 mb-6">
+              <div><span className="text-[#A1A1AA]">Job created:</span> <span className="font-mono">{name}</span></div>
+              <div><span className="text-[#A1A1AA]">Tasks imported:</span> <span className="font-mono text-[#CCFF00]">{commitResult.tasks}</span></div>
             </div>
             <button data-testid="import-done" onClick={onDone} className="k-btn k-btn-primary w-full">Done · View Jobs</button>
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function Kpi({ label, value, tone, testid }) {
+  return (
+    <div data-testid={testid}>
+      <div className="text-[10px] uppercase tracking-widest text-[#A1A1AA] font-semibold">{label}</div>
+      <div className={`font-display font-black text-2xl ${tone || "text-[#FAFAFA]"}`}>{value}</div>
     </div>
   );
 }
