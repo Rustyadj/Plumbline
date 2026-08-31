@@ -1,0 +1,37 @@
+{
+  "summary": "Frontend-only E2E testing of PLUMBLINE after the MobileOps re-skin + bulk task edit + de-selectable CSV import. Verified onboarding (Manager & Field Crew), all 8 sidebar nav routes + active highlight, sidebar collapse (incl. persistence across reload and nav), Admin->Tasks bulk edit (select-all, individual checks, bulk category apply with persistence verified after re-navigation, bulk course apply, bulk delete, bulk clear), single-row task create/edit/delete, full CSV import flow with de-selectable task table (8 rows, select-all header, preview-selected-count updates, commit -> import-success -> import-done), top-bar global search (enabled+filtering on Field View 115->16 rows and Validation Rules, disabled on Dashboard/Admin), job switcher (5 jobs listed, switching updates top bar + dashboard title/KPIs), Field View task sheet open/close, and Dashboard regression (ROI hero, KPI tiles, all charts, rework flags, Foreman Leaderboard + crew drilldown). Zero console/page errors captured across all runs. All requested flows PASS; only 3 minor/medium issues found (no blockers).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "FieldView TaskSheet / CrewDrilldown", "issue": "Escape key does not close the modal; only the X button (close-task-sheet) or backdrop click works. Standard modal UX expects Esc to dismiss.", "selector": "[data-testid=\"close-task-sheet\"]", "priority": "LOW"},
+      {"component": "Shell sidebar nav", "issue": "Nav items are plain <div onClick> without role/tabindex, so they are not keyboard-focusable/activatable (a11y gap).", "selector": "[data-testid^=\"nav-\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "CSV Import -> Done · Review Tasks", "issue": "After a successful import, clicking import-done navigates to the Admin Tasks view but does NOT switch the active job to the newly created job. The table shows the previously active job's 115 tasks (top bar still 'Walls Abilene Intermediate SS'), so the user cannot 'review' the 8 tasks just imported. Recommend setting the newly created job as active on import completion.", "affected_selectors": ["[data-testid=\"import-done\"]", "[data-testid=\"job-switcher\"]", "[data-testid=\"nav-a-tasks\"]"]}
+    ],
+    "design_issues": [
+      {"screen": "Top bar job switcher", "issues": ["Seed data contains two jobs with the identical name 'Walls Abilene Intermediate SS'; dropdown entries are only distinguishable by the small location/client subtitle - confusing when switching jobs."]},
+      {"screen": "Global search state", "issues": ["The top-bar query persists in App state when navigating to a view where search is disabled (Dashboard/Admin) - the (grayed) input keeps the old text and the filter silently re-applies when returning to Field View. Consider clearing query on view change."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/restore_demo_data.py"],
+  "action_items": [
+    "On CSV import completion, switch the active job to the newly imported job before navigating to Admin -> Tasks (otherwise 'Done · Review Tasks' shows the wrong job).",
+    "Add Escape-key close handlers to FieldView TaskSheet and CrewDrilldown modals.",
+    "Make sidebar nav items keyboard-accessible (use <button> or add role=\"button\" + tabIndex).",
+    "Optional: de-duplicate the seeded job name 'Walls Abilene Intermediate SS' and clear the global search query on view change."
+  ],
+  "critical_code_review_comments": [
+    "/app/frontend/src/components/SuperAdmin.jsx is 748 lines (> 700 guideline) and holds JobsPanel, TasksPanel, MistakesPanel, DangerPanel and the whole ImportDialog - split into separate files (e.g. admin/TasksPanel.jsx, admin/ImportDialog.jsx).",
+    "Bulk ops rely on optimistic reload of the whole task list after each mutation; no error/toast surface exists if PATCH /api/tasks/bulk/update fails (only busy flag). Add error state handling in the bulk-action-bar.",
+    "Shell.jsx loadJobs() has no try/catch - a failed GET /jobs would produce an unhandled promise rejection in the top bar."
+  ],
+  "updated_files": ["/app/backend/tests/restore_demo_data.py"],
+  "success_rate": {"backend": "not tested (per request)", "frontend": "100% of requested flows pass (3 minor issues)"},
+  "seed_data_creation": "Created and then deleted 3 tasks named 'TEST_BulkTask *' and one imported job 'TEST_Imported Job QA' (8 tasks). Bulk category/course tests mutated 16 tasks of 'Walls Abilene Intermediate SS'; data was fully restored via /app/backend/tests/restore_demo_data.py (verified 115 tasks with original category distribution Install 34 / Layout 18 / Strip 15 / Rebar 12 / Cleanup 11 / Pour 9 / Precon 8 / Startup 7 / Other 1 and correct 1st/2nd/3rd Pour courses).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "No auth. Onboard: name 'Ryan Cantrell' + role Manager (role-manager-btn) / 'Crew Tester' + Field Crew.",
+  "context_for_next_testing_agent": "Task sheet close button testid is 'close-task-sheet' (not sheet-close). Esc does not close modals. Job switcher lists 5 jobs incl. a duplicate name. Bulk ops auto-clear the selection after apply, so bulk-action-bar disappears after bulk-category-apply/bulk-course-apply - re-select before testing bulk-clear. Import default job name is derived from the file name; set import-name explicitly. Preview-selected-count is a KPI block ('SELECTED n').",
+  "rca_of_the_issue": "Import flow: ImportDialog's onDone only calls onSection('tasks') / job reload in App; the newly created job id is never passed to setJob, so the active job (persisted in localStorage 'plumbline_job_id') remains unchanged and the Tasks panel queries the old job."
+}

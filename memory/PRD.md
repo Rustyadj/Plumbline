@@ -92,3 +92,16 @@ User uploaded `Walls Abilene Intermediate SS.xlsx` (a sprawling, error-laden ICF
 - Demo the new Admin page + Leaderboard to the user.
 - Capture user's real `REWORK_COST_PER_CHECK` number and update via Admin → ROI Settings.
 - If user requests: per-crew drilldown, PDF export, or Excel re-import flow.
+
+## MobileOps Re-skin + Bulk Task Edit (iteration 6 — Aug 31, 2026)
+- **Full UI re-skin** from dark industrial theme → light corporate SaaS ("MobileOps" style) per `/app/design_guidelines.json`:
+  - New palette: light bg `#F8FAFC`, navy sidebar `#0F172A`, blue primary `#2563EB`, emerald success `#10B981`. Fonts: Manrope (display) + IBM Plex Sans (body). `index.css` `k-*` classes fully restyled.
+  - **App Shell rewritten** (`Shell.jsx`): collapsible navy **left sidebar** with grouped nav (OVERVIEW / FIELD / ADMIN) + collapse toggle (persisted in localStorage) + mobile drawer; white **top bar** with job switcher, global search, "New Job", user avatar, logout.
+  - Sidebar Admin group deep-links into SuperAdmin sections; `App.js` now holds `view`, `adminSection`, and global `query` state. `SuperAdmin` is controlled via `section`/`onSection` props (internal tab bar removed).
+  - Top-bar **global search** drives Field View + Validation Rules (`query` prop); disabled on Dashboard/Admin; cleared on nav.
+  - All content components re-themed: Dashboard, FieldView (+TaskSheet), TasksAdmin, CrewDrilldown, Onboarding, OfflineBanner. Modals now close on backdrop click + Escape. Sidebar nav items keyboard-accessible.
+- **Bulk task edit** (Admin → Tasks, `SuperAdmin.jsx` TasksPanel): dense data **table** with per-row checkboxes + select-all; sticky **bulk action bar** (N selected) → Set Category, Set Course, Bulk Delete, Clear. Category filter chips with counts.
+  - New backend endpoints: `PATCH /api/tasks/bulk/update` `{task_ids, category?, course?, unit?}` and `POST /api/tasks/bulk/delete` `{task_ids}`.
+- **Import full de-selectable view**: ImportDialog preview is now a full task **table** (checkbox per row + select-all header, category filter chips, search) so users deselect anything not applicable before committing. On commit the newly created job becomes active and the view jumps to Admin → Tasks for review.
+- **Tested**: testing_agent iteration_3 — 100% of requested frontend flows pass (onboarding, all 8 sidebar routes + active state, collapse persistence, bulk edit incl. persistence, full CSV import, global search, job switcher, Field/Dashboard regression), zero console errors. Bulk endpoints curl-verified. Import→new-job landing verified via screenshot.
+

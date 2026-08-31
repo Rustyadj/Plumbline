@@ -210,6 +210,17 @@ class CommonMistakeCreate(BaseModel):
     task_id: Optional[str] = None
 
 
+class BulkTaskUpdate(BaseModel):
+    task_ids: List[str]
+    category: Optional[str] = None
+    course: Optional[str] = None
+    unit: Optional[str] = None
+
+
+class BulkTaskDelete(BaseModel):
+    task_ids: List[str]
+
+
 async def get_settings() -> Settings:
     doc = await db.settings.find_one({"id": "global"}, {"_id": 0})
     if not doc:
@@ -320,6 +331,25 @@ async def update_task(task_id: str, payload: TaskUpdate):
     if not result:
         raise HTTPException(404, "Task not found")
     return Task(**result)
+
+
+@api_router.patch("/tasks/bulk/update")
+async def bulk_update_tasks(payload: BulkTaskUpdate):
+    update = {k: v for k, v in {"category": payload.category, "course": payload.course, "unit": payload.unit}.items() if v is not None}
+    if not update or not payload.task_ids:
+        raise HTTPException(400, "Provide task_ids and at least one field to update")
+    result = await db.tasks.update_many({"id": {"$in": payload.task_ids}}, {"$set": update})
+    return {"ok": True, "matched": result.matched_count, "modified": result.modified_count}
+
+
+@api_router.post("/tasks/bulk/delete")
+async def bulk_delete_tasks(payload: BulkTaskDelete):
+    if not payload.task_ids:
+        raise HTTPException(400, "Provide task_ids")
+    await db.tasks.delete_many({"id": {"$in": payload.task_ids}})
+    await db.validation_steps.delete_many({"task_id": {"$in": payload.task_ids}})
+    await db.task_entries.delete_many({"task_id": {"$in": payload.task_ids}})
+    return {"ok": True, "deleted": len(payload.task_ids)}
 
 
 @api_router.delete("/tasks/{task_id}")
