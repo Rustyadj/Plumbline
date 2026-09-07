@@ -1,4 +1,5 @@
 import React from "react";
+import { evaluateTolerance } from "@/lib/tolerance";
 import { apiClient } from "@/App";
 import { Camera, Check, X, ChevronRight, AlertTriangle, Sparkles, WifiOff } from "lucide-react";
 import { isOnline, cacheTasks, getCachedTasks, cacheSteps, getCachedSteps, enqueueEntry } from "@/lib/offline";
@@ -322,6 +323,7 @@ function TaskSheet({ task, crewName, role, onClose, onSaved }) {
               )}
               {approvedSteps.map((s) => {
                 const v = vstate[s.id] || {};
+                const tolRes = s.tolerance && v.measured_value ? evaluateTolerance(v.measured_value, s.tolerance) : null;
                 return (
                   <div key={s.id} data-testid={`val-step-${s.id}`} className="k-surface p-4">
                     <div className="flex items-start gap-3">
@@ -344,9 +346,21 @@ function TaskSheet({ task, crewName, role, onClose, onSaved }) {
                     {(s.requires_measurement || v.status) && (
                       <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {s.requires_measurement && (
-                          <div>
+                          <div className="sm:col-span-2">
                             <label className="text-[11px] uppercase tracking-wide text-slate-500 block mb-1 font-semibold">Measured Value{s.unit ? ` (${s.unit})` : ""}</label>
-                            <input data-testid={`val-measured-${s.id}`} className="k-input !py-2" placeholder={s.tolerance ? `Target: ${s.tolerance}` : "e.g. 1/8 in"} value={v.measured_value || ""} onChange={(e) => setStep(s.id, { measured_value: e.target.value })} />
+                            <input data-testid={`val-measured-${s.id}`} className={`k-input !py-2 ${tolRes?.status === "out" ? "!border-red-400 !bg-red-50" : tolRes?.status === "in" ? "!border-emerald-400" : ""}`} placeholder={s.tolerance ? `Target: ${s.tolerance}` : "e.g. 1/8 in"} value={v.measured_value || ""} onChange={(e) => {
+                              const mv = e.target.value;
+                              const r = s.tolerance ? evaluateTolerance(mv, s.tolerance) : { status: "unknown" };
+                              setStep(s.id, r.status === "out" ? { measured_value: mv, status: "fail" } : { measured_value: mv });
+                            }} />
+                            {tolRes?.status === "out" && (
+                              <div data-testid={`val-oot-${s.id}`} className="text-xs font-bold text-red-600 mt-1.5 flex items-center gap-1">
+                                <AlertTriangle className="w-3.5 h-3.5" /> OUT OF TOLERANCE — auto-flagged FAIL. Foreman alerted.
+                              </div>
+                            )}
+                            {tolRes?.status === "in" && (
+                              <div className="text-xs font-semibold text-emerald-600 mt-1.5 flex items-center gap-1"><Check className="w-3.5 h-3.5" /> Within tolerance</div>
+                            )}
                           </div>
                         )}
                         {v.status && (

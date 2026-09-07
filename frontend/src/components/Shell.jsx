@@ -2,7 +2,7 @@ import React from "react";
 import {
   LayoutDashboard, ClipboardList, HardHat, ShieldCheck, Briefcase, Settings,
   AlertTriangle, RotateCcw, ChevronDown, Check, Search, Plus, LogOut,
-  PanelLeftClose, PanelLeftOpen,
+  PanelLeftClose, PanelLeftOpen, MessageSquare, Bot,
 } from "lucide-react";
 import { apiClient } from "@/App";
 import OfflineBanner from "@/components/OfflineBanner";
@@ -27,7 +27,10 @@ export default function Shell({ view, adminSection, onNavigate, role, crewName, 
 
   const groups = role === "manager"
     ? [
-        { title: "Overview", items: [{ id: "dashboard", label: "Dashboard", icon: LayoutDashboard, view: "dashboard" }] },
+        { title: "Overview", items: [
+          { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, view: "dashboard" },
+          { id: "feed", label: "Live Feed", icon: MessageSquare, view: "feed" },
+        ]},
         { title: "Field", items: [
           { id: "field", label: "Field View", icon: HardHat, view: "field" },
           { id: "tasks", label: "Validation Rules", icon: ShieldCheck, view: "tasks" },
@@ -36,14 +39,18 @@ export default function Shell({ view, adminSection, onNavigate, role, crewName, 
           { id: "a-jobs", label: "Jobs", icon: Briefcase, view: "admin", section: "jobs" },
           { id: "a-tasks", label: "Tasks", icon: ClipboardList, view: "admin", section: "tasks" },
           { id: "a-settings", label: "ROI Settings", icon: Settings, view: "admin", section: "settings" },
+          { id: "a-ai", label: "AI Settings", icon: Bot, view: "admin", section: "ai" },
           { id: "a-mistakes", label: "Common Mistakes", icon: AlertTriangle, view: "admin", section: "mistakes" },
           { id: "a-danger", label: "Danger Zone", icon: RotateCcw, view: "admin", section: "danger" },
         ]},
       ]
     : [
+        { title: "Overview", items: [
+          { id: "feed", label: "Live Feed", icon: MessageSquare, view: "feed" },
+          { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, view: "dashboard" },
+        ]},
         { title: "Field", items: [
           { id: "field", label: "Field View", icon: HardHat, view: "field" },
-          { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, view: "dashboard" },
           { id: "tasks", label: "Validation Rules", icon: ShieldCheck, view: "tasks" },
         ]},
       ];

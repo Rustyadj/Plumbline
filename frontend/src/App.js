@@ -6,6 +6,7 @@ import FieldView from "@/components/FieldView";
 import Dashboard from "@/components/Dashboard";
 import TasksAdmin from "@/components/TasksAdmin";
 import SuperAdmin from "@/components/SuperAdmin";
+import LiveFeed from "@/components/LiveFeed";
 import Onboarding from "@/components/Onboarding";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -112,6 +113,7 @@ function App() {
       }}
     >
       {view === "field" && <FieldView job={job} crewName={crewName} role={role} query={query} />}
+      {view === "feed" && <LiveFeed crewName={crewName} role={role} />}
       {view === "dashboard" && <Dashboard job={job} />}
       {view === "tasks" && <TasksAdmin job={job} role={role} query={query} />}
       {view === "admin" && role === "manager" && (

@@ -1,6 +1,6 @@
 import React from "react";
 import { apiClient, API } from "@/App";
-import { Settings, Briefcase, ListTodo, AlertTriangle, RotateCcw, Save, Plus, Trash2, Edit3, X, Upload, Check, Tag, Layers } from "lucide-react";
+import { Settings, Briefcase, ListTodo, AlertTriangle, RotateCcw, Save, Plus, Trash2, Edit3, X, Upload, Check, Tag, Layers, Bot, KeyRound } from "lucide-react";
 
 const CATEGORIES = ["Precon", "Startup", "Layout", "Install", "Rebar", "Pour", "Strip", "Cleanup", "Other"];
 const COURSES = ["all", "1st", "2nd", "3rd", "4th", "5th"];
@@ -8,6 +8,7 @@ const UNITS = ["LF", "SF", "EA", "HRS", "%"];
 
 const SECTION_META = {
   settings: { label: "ROI Settings", desc: "Tune the cost model that drives the Rework Cost Saver." },
+  ai: { label: "AI Settings", desc: "Connect your own AI key and name your in-app assistant." },
   jobs: { label: "Jobs", desc: "Create, edit, import, and delete jobs." },
   tasks: { label: "Tasks", desc: "Bulk-select to re-categorize or remove tasks after import." },
   mistakes: { label: "Common Mistakes", desc: "Fix-it guidance the crew sees in the field." },
@@ -26,10 +27,111 @@ export default function SuperAdmin({ job, section = "jobs", onSection, onJobChan
 
       <div className="k-slide-up">
         {section === "settings" && <SettingsPanel />}
+        {section === "ai" && <AiSettingsPanel />}
         {section === "jobs" && <JobsPanel job={job} onChanged={onJobChanged} onImported={onJobImported} onGoTasks={() => onSection?.("tasks")} />}
         {section === "tasks" && <TasksPanel job={job} />}
         {section === "mistakes" && <MistakesPanel />}
         {section === "danger" && <DangerPanel onReset={onJobChanged} />}
+      </div>
+    </div>
+  );
+}
+
+/* ── AI SETTINGS ──────────────────────────────────────────────── */
+const AI_MODELS = {
+  openai: ["gpt-5.4", "gpt-5.4-mini", "gpt-5.2", "gpt-4.1", "gpt-4o"],
+  anthropic: ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001", "claude-sonnet-4-5-20250929"],
+  gemini: ["gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-2.5-flash", "gemini-2.5-pro"],
+};
+const KEY_HELP = {
+  openai: "platform.openai.com/api-keys",
+  anthropic: "console.anthropic.com/settings/keys",
+  gemini: "aistudio.google.com/apikey",
+};
+
+function AiSettingsPanel() {
+  const [cur, setCur] = React.useState(null);
+  const [provider, setProvider] = React.useState("openai");
+  const [model, setModel] = React.useState("gpt-5.4");
+  const [botName, setBotName] = React.useState("@titanicf_bot");
+  const [apiKey, setApiKey] = React.useState("");
+  const [saved, setSaved] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    const r = await apiClient.get("/ai-settings");
+    setCur(r.data);
+    setProvider(r.data.ai_provider || "openai");
+    setModel(r.data.ai_model || "gpt-5.4");
+    setBotName(r.data.bot_name || "@titanicf_bot");
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const changeProvider = (p) => {
+    setProvider(p);
+    if (!AI_MODELS[p].includes(model)) setModel(AI_MODELS[p][0]);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    const body = { ai_provider: provider, ai_model: model, bot_name: botName.trim() || "@titanicf_bot" };
+    if (apiKey.trim()) body.ai_api_key = apiKey.trim();
+    const r = await apiClient.post("/ai-settings", body);
+    setCur(r.data);
+    setApiKey("");
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  if (!cur) return <div className="text-sm text-slate-500">Loading…</div>;
+
+  return (
+    <div className="max-w-2xl space-y-5" data-testid="ai-settings-panel">
+      <div className={`k-surface p-4 flex items-center gap-3 ${cur.has_key ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`}>
+        <Bot className={`w-6 h-6 ${cur.has_key ? "text-emerald-600" : "text-amber-600"}`} />
+        <div className="flex-1">
+          <div className="font-display font-bold text-slate-900">{cur.bot_name} is {cur.has_key ? "connected" : "not connected"}</div>
+          <div className="text-sm text-slate-600">
+            {cur.has_key ? `Using ${cur.ai_provider} · ${cur.ai_model} · key ${cur.key_hint}` : "Paste your API key below to activate the assistant in the Live Feed."}
+          </div>
+        </div>
+      </div>
+
+      <div className="k-surface p-5 space-y-4">
+        <div>
+          <label className="text-[11px] uppercase tracking-wide text-slate-500 block mb-1 font-semibold">Assistant Handle</label>
+          <input data-testid="ai-bot-name" className="k-input" value={botName} onChange={(e) => setBotName(e.target.value)} placeholder="@titanicf_bot" />
+          <p className="text-xs text-slate-400 mt-1">Crews mention this handle in the Live Feed to talk to the AI.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="text-[11px] uppercase tracking-wide text-slate-500 block mb-1 font-semibold">Provider</label>
+            <select data-testid="ai-provider" className="k-input" value={provider} onChange={(e) => changeProvider(e.target.value)}>
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic (Claude)</option>
+              <option value="gemini">Google Gemini</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] uppercase tracking-wide text-slate-500 block mb-1 font-semibold">Model</label>
+            <select data-testid="ai-model" className="k-input" value={model} onChange={(e) => setModel(e.target.value)}>
+              {AI_MODELS[provider].map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[11px] uppercase tracking-wide text-slate-500 block mb-1 font-semibold flex items-center gap-1"><KeyRound className="w-3.5 h-3.5" /> Your API Key</label>
+          <input data-testid="ai-api-key" type="password" className="k-input font-mono" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={cur.has_key ? `Saved (${cur.key_hint}) — type to replace` : "sk-..."} />
+          <p className="text-xs text-slate-400 mt-1">Stored securely on your backend. Get a key at <span className="text-blue-600">{KEY_HELP[provider]}</span></p>
+        </div>
+
+        <div className="flex items-center gap-3 pt-1">
+          <button data-testid="ai-save-btn" onClick={save} disabled={saving} className="k-btn k-btn-primary"><Save className="w-4 h-4" /> {saving ? "Saving…" : "Save AI Settings"}</button>
+          {saved && <span className="text-sm text-emerald-600 font-semibold flex items-center gap-1"><Check className="w-4 h-4" /> Saved</span>}
+        </div>
       </div>
     </div>
   );

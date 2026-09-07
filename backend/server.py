@@ -20,6 +20,8 @@ from emergentintegrations.llm.chat import LlmChat, UserMessage
 from seed_tasks import TASK_TEMPLATES, DEFAULT_VALIDATION_STEPS, COMMON_MISTAKES
 from exports import build_recap_xlsx, build_recap_pdf, parse_xlsx_for_import, parse_csv_for_import
 from importer import parse_and_map_tasks
+from tolerance import evaluate as eval_tolerance
+from feed_ai import run_agent as run_ai_agent
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -101,6 +103,7 @@ class ValidationCheck(BaseModel):
     spec_reference: Optional[str] = None
     photo_b64: Optional[str] = None  # data url string
     fix_notes: Optional[str] = None
+    out_of_tolerance: bool = False
     timestamp: str = Field(default_factory=now_iso)
 
 
@@ -179,7 +182,10 @@ class Settings(BaseModel):
     id: str = "global"
     rework_cost_per_check: float = 850.0
     photo_audit_value: float = 75.0
-    ai_model: str = "claude-sonnet-4-6"
+    ai_model: str = "gpt-5.4"
+    ai_provider: str = "openai"
+    ai_api_key: str = ""
+    bot_name: str = "@titanicf_bot"
     company_name: str = "Titan ICF"
     updated_at: str = Field(default_factory=now_iso)
 
@@ -189,6 +195,31 @@ class SettingsUpdate(BaseModel):
     photo_audit_value: Optional[float] = None
     ai_model: Optional[str] = None
     company_name: Optional[str] = None
+
+
+class AiSettingsUpdate(BaseModel):
+    ai_provider: Optional[str] = None
+    ai_model: Optional[str] = None
+    ai_api_key: Optional[str] = None
+    bot_name: Optional[str] = None
+
+
+class FeedMessage(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=new_id)
+    type: Literal["message", "system", "alert", "ai"] = "message"
+    author: str = "System"
+    role: Optional[str] = None
+    text: str
+    mentions: List[str] = Field(default_factory=list)
+    meta: dict = Field(default_factory=dict)
+    created_at: str = Field(default_factory=now_iso)
+
+
+class FeedMessageCreate(BaseModel):
+    author: str = "Anonymous"
+    role: Optional[str] = None
+    text: str
 
 
 class JobUpdate(BaseModel):
@@ -244,6 +275,26 @@ async def get_settings() -> Settings:
         await db.settings.insert_one(s.model_dump())
         return s
     return Settings(**doc)
+
+
+async def post_feed(text: str, *, type: str = "system", author: str = "System",
+                    role: str = None, mentions: list = None, meta: dict = None) -> FeedMessage:
+    msg = FeedMessage(type=type, author=author, role=role, text=text,
+                      mentions=mentions or [], meta=meta or {})
+    await db.feed.insert_one(msg.model_dump())
+    return msg
+
+
+def extract_mentions(text: str) -> list:
+    import re as _re
+    return _re.findall(r"@[\w\-\.]+", text or "")
+
+
+def bot_is_mentioned(text: str, bot_name: str) -> bool:
+    handle = (bot_name or "").lstrip("@").lower()
+    if not handle:
+        return False
+    return ("@" + handle) in (text or "").lower()
 
 
 # ── LLM HELPERS ────────────────────────────────────────────────────
@@ -551,6 +602,15 @@ async def create_entry(task_id: str, payload: TaskEntryCreate):
     if not task_doc:
         raise HTTPException(404, "Task not found")
     task = Task(**task_doc)
+    # Out-of-tolerance auto-flag: measured value beyond the rule tolerance => FAIL
+    flagged = []
+    for v in payload.validations:
+        if v.measured_value and v.tolerance:
+            res = eval_tolerance(v.measured_value, v.tolerance)
+            if res.get("status") == "out":
+                v.status = "fail"
+                v.out_of_tolerance = True
+                flagged.append(v)
     has_failed = any(v.status == "fail" for v in payload.validations)
     entry = TaskEntry(
         task_id=task_id,
@@ -559,6 +619,14 @@ async def create_entry(task_id: str, payload: TaskEntryCreate):
         **payload.model_dump(),
     )
     await db.task_entries.insert_one(entry.model_dump())
+
+    for v in flagged:
+        await post_feed(
+            f"⚠️ OUT OF TOLERANCE — '{task.name}' · {v.description}: measured **{v.measured_value}** "
+            f"against spec **{v.tolerance}**. Logged by {payload.crew_member}. @foreman please review.",
+            type="alert", author="Tolerance Watch",
+            mentions=["@foreman"], meta={"task_id": task_id, "job_id": task.job_id},
+        )
 
     # update task aggregates + status
     new_actual_hours = task.actual_hours + payload.hours
@@ -593,6 +661,170 @@ async def list_common_mistakes(category: Optional[str] = None):
     q = {"category": category} if category else {}
     docs = await db.common_mistakes.find(q, {"_id": 0}).to_list(200)
     return docs
+
+
+# ── LIVE FEED + AI ASSISTANT ───────────────────────────────────────
+async def _resolve_job(ref: str):
+    if not ref:
+        return None
+    doc = await db.jobs.find_one({"id": ref}, {"_id": 0})
+    if doc:
+        return Job(**doc)
+    jobs = await db.jobs.find({}, {"_id": 0}).to_list(500)
+    rl = ref.lower()
+    exact = [j for j in jobs if j["name"].lower() == rl]
+    if exact:
+        return Job(**exact[0])
+    partial = [j for j in jobs if rl in j["name"].lower()]
+    return Job(**partial[0]) if len(partial) == 1 else (Job(**partial[0]) if partial else None)
+
+
+async def _resolve_task(job: Job, ref: str):
+    if not job or not ref:
+        return None
+    tasks = await db.tasks.find({"job_id": job.id}, {"_id": 0}).to_list(2000)
+    rl = ref.lower()
+    exact = [t for t in tasks if t["name"].lower() == rl]
+    if exact:
+        return Task(**exact[0])
+    partial = [t for t in tasks if rl in t["name"].lower()]
+    return Task(**partial[0]) if partial else None
+
+
+async def ai_dispatch(name: str, args: dict):
+    try:
+        if name == "get_overview":
+            jobs = await db.jobs.find({}, {"_id": 0}).to_list(500)
+            s = await get_settings()
+            out = {"jobs": [{"id": j["id"], "name": j["name"], "status": j.get("status")} for j in jobs],
+                   "roi_settings": {"rework_cost_per_check": s.rework_cost_per_check,
+                                    "photo_audit_value": s.photo_audit_value, "company_name": s.company_name}}
+            if args.get("job"):
+                job = await _resolve_job(args["job"])
+                if job:
+                    tasks = await db.tasks.find({"job_id": job.id}, {"_id": 0}).to_list(2000)
+                    counts = {}
+                    for t in tasks:
+                        counts[t["category"]] = counts.get(t["category"], 0) + 1
+                    out["job"] = {"id": job.id, "name": job.name, "task_count": len(tasks), "category_counts": counts}
+            return out
+
+        if name == "list_tasks":
+            job = await _resolve_job(args.get("job"))
+            if not job:
+                return {"error": f"Job '{args.get('job')}' not found."}
+            q = {"job_id": job.id}
+            if args.get("category"):
+                q["category"] = args["category"]
+            if args.get("status"):
+                q["status"] = args["status"]
+            tasks = await db.tasks.find(q, {"_id": 0}).to_list(2000)
+            return {"job": job.name, "count": len(tasks),
+                    "tasks": [{"name": t["name"], "category": t["category"], "course": t.get("course"),
+                               "status": t.get("status")} for t in tasks[:60]]}
+
+        if name == "create_job":
+            job = Job(name=args["name"], location=args.get("location", ""), client=args.get("client", ""))
+            await db.jobs.insert_one(job.model_dump())
+            return {"ok": True, "job_id": job.id, "name": job.name}
+
+        if name == "add_task":
+            job = await _resolve_job(args.get("job"))
+            if not job:
+                return {"error": f"Job '{args.get('job')}' not found."}
+            task = Task(job_id=job.id, name=args["name"], category=args.get("category", "Other"),
+                        course=args.get("course", "all"), unit=args.get("unit"),
+                        estimated_hours=args.get("estimated_hours"), estimated_qty=args.get("estimated_qty"))
+            await db.tasks.insert_one(task.model_dump())
+            return {"ok": True, "task_id": task.id, "name": task.name, "job": job.name}
+
+        if name == "add_validation_rule":
+            job = await _resolve_job(args.get("job"))
+            if not job:
+                return {"error": f"Job '{args.get('job')}' not found."}
+            task = await _resolve_task(job, args.get("task"))
+            if not task:
+                return {"error": f"Task '{args.get('task')}' not found in {job.name}."}
+            step = ValidationStep(task_id=task.id, description=args["description"],
+                                  tolerance=args.get("tolerance"), spec_reference=args.get("spec_reference"),
+                                  requires_measurement=bool(args.get("requires_measurement")),
+                                  unit=args.get("unit"), requires_photo=bool(args.get("requires_photo")),
+                                  source="manual", approved=True)
+            await db.validation_steps.insert_one(step.model_dump())
+            return {"ok": True, "task": task.name, "rule": step.description, "tolerance": step.tolerance}
+
+        if name == "recategorize_tasks":
+            job = await _resolve_job(args.get("job"))
+            if not job:
+                return {"error": f"Job '{args.get('job')}' not found."}
+            r = await db.tasks.update_many({"job_id": job.id, "category": args["from_category"]},
+                                           {"$set": {"category": args["to_category"]}})
+            return {"ok": True, "moved": r.modified_count, "from": args["from_category"], "to": args["to_category"]}
+
+        if name == "update_roi_settings":
+            update = {k: v for k, v in {"rework_cost_per_check": args.get("rework_cost_per_check"),
+                                        "photo_audit_value": args.get("photo_audit_value"),
+                                        "company_name": args.get("company_name")}.items() if v is not None}
+            if not update:
+                return {"error": "Nothing to update."}
+            await db.settings.update_one({"id": "global"}, {"$set": update}, upsert=True)
+            return {"ok": True, "updated": update}
+
+        return {"error": f"Unknown tool {name}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@api_router.get("/feed")
+async def get_feed(limit: int = 200):
+    docs = await db.feed.find({}, {"_id": 0}).sort("created_at", 1).to_list(limit)
+    return docs
+
+
+@api_router.post("/feed")
+async def post_feed_message(payload: FeedMessageCreate):
+    msg = FeedMessage(type="message", author=payload.author, role=payload.role,
+                      text=payload.text, mentions=extract_mentions(payload.text))
+    await db.feed.insert_one(msg.model_dump())
+    results = [msg.model_dump()]
+
+    settings = await get_settings()
+    if bot_is_mentioned(payload.text, settings.bot_name):
+        if not settings.ai_api_key:
+            bot = await post_feed(
+                f"I'm not connected yet — add your AI API key in **Admin → AI Settings** to activate {settings.bot_name}.",
+                type="ai", author=settings.bot_name)
+            results.append(bot.model_dump())
+        else:
+            try:
+                out = await run_ai_agent(
+                    payload.text, bot_name=settings.bot_name, provider=settings.ai_provider,
+                    model=settings.ai_model, api_key=settings.ai_api_key, dispatch=ai_dispatch,
+                    session_id="feed-" + msg.id)
+                bot = await post_feed(out["reply"] or "Done.", type="ai", author=settings.bot_name,
+                                      meta={"actions": [a["name"] for a in out["actions"]]})
+                results.append(bot.model_dump())
+            except Exception as e:
+                bot = await post_feed(f"⚠️ I hit an error: {e}", type="ai", author=settings.bot_name)
+                results.append(bot.model_dump())
+    return {"messages": results}
+
+
+@api_router.get("/ai-settings")
+async def read_ai_settings():
+    s = await get_settings()
+    key = s.ai_api_key or ""
+    return {"ai_provider": s.ai_provider, "ai_model": s.ai_model, "bot_name": s.bot_name,
+            "has_key": bool(key), "key_hint": ("••••" + key[-4:]) if len(key) >= 4 else ""}
+
+
+@api_router.post("/ai-settings")
+async def write_ai_settings(payload: AiSettingsUpdate):
+    update = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if update:
+        update["updated_at"] = now_iso()
+        await db.settings.update_one({"id": "global"}, {"$set": update}, upsert=True)
+    return await read_ai_settings()
 
 
 # ── DASHBOARD ──────────────────────────────────────────────────────
