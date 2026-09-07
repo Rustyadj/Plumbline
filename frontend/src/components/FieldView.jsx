@@ -230,6 +230,10 @@ function TaskSheet({ task, crewName, role, onClose, onSaved }) {
       const v = vstate[s.id] || {};
       return {
         step_id: s.id, description: s.description, status: v.status || "skipped",
+        measured_value: v.measured_value || null,
+        verified_by: v.status ? (v.verified_by ?? crewName) : null,
+        tolerance: s.tolerance || null,
+        spec_reference: s.spec_reference || null,
         photo_b64: v.photo_b64 || null, fix_notes: v.fix_notes || null,
         timestamp: new Date().toISOString(),
       };
@@ -329,9 +333,30 @@ function TaskSheet({ task, crewName, role, onClose, onSaved }) {
                       </button>
                       <div className="flex-1">
                         <div className="font-medium leading-snug text-slate-800">{s.description}</div>
-                        {s.requires_photo && <div className="text-[11px] uppercase tracking-wide text-blue-600 font-semibold mt-1">Photo required</div>}
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {s.tolerance && <span className="k-pill k-pill-in_progress" data-testid={`val-tol-${s.id}`}>Tol: {s.tolerance}</span>}
+                          {s.spec_reference && <span className="k-pill k-pill-not_started" data-testid={`val-spec-${s.id}`}>Spec: {s.spec_reference}</span>}
+                          {s.requires_photo && <span className="text-[11px] uppercase tracking-wide text-blue-600 font-semibold self-center">Photo required</span>}
+                        </div>
                       </div>
                     </div>
+
+                    {(s.requires_measurement || v.status) && (
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {s.requires_measurement && (
+                          <div>
+                            <label className="text-[11px] uppercase tracking-wide text-slate-500 block mb-1 font-semibold">Measured Value{s.unit ? ` (${s.unit})` : ""}</label>
+                            <input data-testid={`val-measured-${s.id}`} className="k-input !py-2" placeholder={s.tolerance ? `Target: ${s.tolerance}` : "e.g. 1/8 in"} value={v.measured_value || ""} onChange={(e) => setStep(s.id, { measured_value: e.target.value })} />
+                          </div>
+                        )}
+                        {v.status && (
+                          <div>
+                            <label className="text-[11px] uppercase tracking-wide text-slate-500 block mb-1 font-semibold">Verified By</label>
+                            <input data-testid={`val-verified-${s.id}`} className="k-input !py-2" value={v.verified_by ?? crewName} onChange={(e) => setStep(s.id, { verified_by: e.target.value })} />
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {v.status === "pass" && s.requires_photo && (
                       <label className="k-photo mt-3 block p-4" data-testid={`val-photo-label-${s.id}`}>

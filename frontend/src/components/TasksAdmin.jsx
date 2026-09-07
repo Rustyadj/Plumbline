@@ -1,6 +1,6 @@
 import React from "react";
 import { apiClient } from "@/App";
-import { Sparkles, Check, X, Plus, Trash2, Camera, ChevronDown } from "lucide-react";
+import { Sparkles, Check, X, Plus, Trash2, Camera, ChevronDown, Ruler, Edit3, Save } from "lucide-react";
 
 export default function TasksAdmin({ job, role, query = "" }) {
   const [tasks, setTasks] = React.useState([]);
@@ -58,8 +58,8 @@ function TaskAdminRow({ task, isOpen, onToggle, role }) {
   const [steps, setSteps] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
   const [genLoading, setGenLoading] = React.useState(false);
-  const [newDesc, setNewDesc] = React.useState("");
-  const [newPhoto, setNewPhoto] = React.useState(false);
+  const [adding, setAdding] = React.useState(false);
+  const [editId, setEditId] = React.useState(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -83,10 +83,31 @@ function TaskAdminRow({ task, isOpen, onToggle, role }) {
 
   const approve = async (id) => { await apiClient.patch(`/validation-steps/${id}`, { approved: true }); load(); };
   const reject = async (id) => { await apiClient.delete(`/validation-steps/${id}`); load(); };
-  const addManual = async () => {
-    if (!newDesc.trim()) return;
-    await apiClient.post(`/tasks/${task.id}/validation-steps`, { description: newDesc.trim(), requires_photo: newPhoto, source: "manual", approved: true });
-    setNewDesc(""); setNewPhoto(false); load();
+
+  const addManual = async (d) => {
+    if (!d.description.trim()) return;
+    await apiClient.post(`/tasks/${task.id}/validation-steps`, {
+      description: d.description.trim(),
+      tolerance: d.tolerance.trim() || null,
+      spec_reference: d.spec_reference.trim() || null,
+      requires_measurement: d.requires_measurement,
+      unit: d.unit.trim() || null,
+      requires_photo: d.requires_photo,
+      source: "manual", approved: true,
+    });
+    setAdding(false); load();
+  };
+
+  const saveEdit = async (id, d) => {
+    await apiClient.patch(`/validation-steps/${id}`, {
+      description: d.description.trim(),
+      tolerance: d.tolerance.trim() || "",
+      spec_reference: d.spec_reference.trim() || "",
+      requires_measurement: d.requires_measurement,
+      unit: d.unit.trim() || "",
+      requires_photo: d.requires_photo,
+    });
+    setEditId(null); load();
   };
 
   const approved = steps.filter(s => s.approved);
@@ -121,15 +142,29 @@ function TaskAdminRow({ task, isOpen, onToggle, role }) {
             {!loading && approved.length === 0 && <div className="text-sm text-slate-500 p-3 rounded-lg border border-dashed border-slate-300 bg-white">No approved rules yet.</div>}
             <ul className="space-y-1.5">
               {approved.map((s) => (
-                <li key={s.id} className="k-surface p-3 flex items-start gap-3" data-testid={`approved-step-${s.id}`}>
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <div className="text-sm text-slate-800">{s.description}</div>
-                    {s.requires_photo && <div className="text-[11px] uppercase tracking-wide text-blue-600 font-semibold mt-0.5"><Camera className="inline w-3 h-3 mr-1" />Photo required</div>}
-                    <div className="text-[11px] uppercase tracking-wide text-slate-400 mt-0.5">Source: {s.source}</div>
-                  </div>
-                  {role === "manager" && <button onClick={() => reject(s.id)} data-testid={`delete-step-${s.id}`} className="k-btn !px-2 !py-2"><Trash2 className="w-3.5 h-3.5" /></button>}
-                </li>
+                editId === s.id ? (
+                  <li key={s.id}><RuleEditor initial={s} onSave={(d) => saveEdit(s.id, d)} onCancel={() => setEditId(null)} /></li>
+                ) : (
+                  <li key={s.id} className="k-surface p-3 flex items-start gap-3" data-testid={`approved-step-${s.id}`}>
+                    <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-slate-800">{s.description}</div>
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {s.tolerance && <span className="k-pill k-pill-in_progress" data-testid={`step-tol-${s.id}`}>Tol: {s.tolerance}</span>}
+                        {s.spec_reference && <span className="k-pill k-pill-not_started">Spec: {s.spec_reference}</span>}
+                        {s.requires_measurement && <span className="k-pill k-pill-validated"><Ruler className="inline w-3 h-3 mr-1" />Measure{s.unit ? ` (${s.unit})` : ""}</span>}
+                        {s.requires_photo && <span className="k-pill k-pill-not_started"><Camera className="inline w-3 h-3 mr-1" />Photo</span>}
+                      </div>
+                      <div className="text-[11px] uppercase tracking-wide text-slate-400 mt-1">Source: {s.source}</div>
+                    </div>
+                    {role === "manager" && (
+                      <div className="flex gap-1.5 shrink-0">
+                        <button onClick={() => setEditId(s.id)} data-testid={`edit-step-${s.id}`} className="k-btn !px-2 !py-2"><Edit3 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => reject(s.id)} data-testid={`delete-step-${s.id}`} className="k-btn k-btn-danger !px-2 !py-2"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                    )}
+                  </li>
+                )
               ))}
             </ul>
           </div>
@@ -159,17 +194,63 @@ function TaskAdminRow({ task, isOpen, onToggle, role }) {
 
           {role === "manager" && (
             <div className="border-t border-slate-200 pt-4">
-              <h4 className="font-display font-bold text-sm text-slate-500 mb-2">Add Manual Rule</h4>
-              <input data-testid={`manual-desc-${task.id}`} className="k-input" placeholder="e.g. Verify rebar lap is at least 30 inches" value={newDesc} onChange={(e) => setNewDesc(e.target.value)} />
-              <label className="flex items-center gap-2 mt-2 cursor-pointer text-sm text-slate-700">
-                <input type="checkbox" data-testid={`manual-photo-${task.id}`} checked={newPhoto} onChange={(e) => setNewPhoto(e.target.checked)} />
-                Requires photo proof
-              </label>
-              <button data-testid={`manual-add-${task.id}`} onClick={addManual} className="k-btn k-btn-primary mt-2"><Plus className="w-4 h-4" /> Add Rule</button>
+              {adding ? (
+                <RuleEditor onSave={addManual} onCancel={() => setAdding(false)} isNew />
+              ) : (
+                <button data-testid={`manual-add-${task.id}`} onClick={() => setAdding(true)} className="k-btn k-btn-primary"><Plus className="w-4 h-4" /> Add Validation Rule</button>
+              )}
             </div>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function RuleEditor({ initial, onSave, onCancel, isNew }) {
+  const [d, setD] = React.useState({
+    description: initial?.description || "",
+    tolerance: initial?.tolerance || "",
+    spec_reference: initial?.spec_reference || "",
+    requires_measurement: initial?.requires_measurement || false,
+    unit: initial?.unit || "",
+    requires_photo: initial?.requires_photo || false,
+  });
+  const set = (patch) => setD((prev) => ({ ...prev, ...patch }));
+
+  return (
+    <div className="k-surface p-3 border-blue-300 space-y-2">
+      <div>
+        <label className="text-[11px] uppercase tracking-wide text-slate-500 block mb-1 font-semibold">Description *</label>
+        <input data-testid="rule-desc" className="k-input !py-2" placeholder="e.g. Wall plumb vertical" value={d.description} onChange={(e) => set({ description: e.target.value })} />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <div>
+          <label className="text-[11px] uppercase tracking-wide text-slate-500 block mb-1 font-semibold">Target / Tolerance</label>
+          <input data-testid="rule-tolerance" className="k-input !py-2" placeholder='e.g. Plumb ± 1/4 in · 16 in O.C.' value={d.tolerance} onChange={(e) => set({ tolerance: e.target.value })} />
+        </div>
+        <div>
+          <label className="text-[11px] uppercase tracking-wide text-slate-500 block mb-1 font-semibold">Plan / Spec Reference</label>
+          <input data-testid="rule-spec" className="k-input !py-2" placeholder="e.g. S-201 / ACI 318" value={d.spec_reference} onChange={(e) => set({ spec_reference: e.target.value })} />
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-4 pt-1">
+        <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
+          <input type="checkbox" data-testid="rule-measure" className="w-4 h-4 accent-blue-600" checked={d.requires_measurement} onChange={(e) => set({ requires_measurement: e.target.checked })} />
+          Requires measured value
+        </label>
+        {d.requires_measurement && (
+          <input data-testid="rule-unit" className="k-input !py-1.5 !text-sm max-w-[130px]" placeholder="unit (e.g. in)" value={d.unit} onChange={(e) => set({ unit: e.target.value })} />
+        )}
+        <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
+          <input type="checkbox" data-testid="rule-photo" className="w-4 h-4 accent-blue-600" checked={d.requires_photo} onChange={(e) => set({ requires_photo: e.target.checked })} />
+          Requires photo proof
+        </label>
+      </div>
+      <div className="flex gap-2 pt-1">
+        <button data-testid="rule-save" onClick={() => onSave(d)} disabled={!d.description.trim()} className="k-btn k-btn-primary !py-2"><Save className="w-3.5 h-3.5" /> {isNew ? "Add Rule" : "Save"}</button>
+        <button onClick={onCancel} className="k-btn !py-2"><X className="w-3.5 h-3.5" /> Cancel</button>
+      </div>
     </div>
   );
 }

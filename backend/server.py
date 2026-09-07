@@ -81,6 +81,10 @@ class ValidationStep(BaseModel):
     task_id: str
     description: str
     requires_photo: bool = False
+    requires_measurement: bool = False
+    unit: Optional[str] = None
+    tolerance: Optional[str] = None
+    spec_reference: Optional[str] = None
     source: Literal["manual", "ai_suggested", "ai_approved", "default"] = "manual"
     approved: bool = True
     order: int = 0
@@ -91,6 +95,10 @@ class ValidationCheck(BaseModel):
     step_id: str
     description: str
     status: Literal["pass", "fail", "skipped"]
+    measured_value: Optional[str] = None
+    verified_by: Optional[str] = None
+    tolerance: Optional[str] = None
+    spec_reference: Optional[str] = None
     photo_b64: Optional[str] = None  # data url string
     fix_notes: Optional[str] = None
     timestamp: str = Field(default_factory=now_iso)
@@ -131,6 +139,10 @@ class JobCreate(BaseModel):
 class ValidationStepCreate(BaseModel):
     description: str
     requires_photo: bool = False
+    requires_measurement: bool = False
+    unit: Optional[str] = None
+    tolerance: Optional[str] = None
+    spec_reference: Optional[str] = None
     source: Literal["manual", "ai_suggested", "ai_approved", "default"] = "manual"
     approved: bool = True
 
@@ -138,6 +150,10 @@ class ValidationStepCreate(BaseModel):
 class ValidationStepPatch(BaseModel):
     description: Optional[str] = None
     requires_photo: Optional[bool] = None
+    requires_measurement: Optional[bool] = None
+    unit: Optional[str] = None
+    tolerance: Optional[str] = None
+    spec_reference: Optional[str] = None
     approved: Optional[bool] = None
 
 
