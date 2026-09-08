@@ -11,7 +11,7 @@ export default function Onboarding({ onDone }) {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-[#f7f6f2] flex items-center justify-center px-4 py-12">
       <div className="max-w-lg w-full">
         <div className="k-surface p-8 md:p-10">
           {/* Brand */}

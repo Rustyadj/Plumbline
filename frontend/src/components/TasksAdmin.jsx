@@ -44,7 +44,8 @@ export default function TasksAdmin({ job, role, query = "" }) {
         ))}
       </div>
 
-      <div className="space-y-2">
+      <div className="rules-register">
+        <div className="rules-row rules-header" aria-hidden="true"><span>Task</span><span>Phase</span><span>Course</span><span>Rules</span><span /></div>
         {filtered.length === 0 && <div className="k-surface p-8 text-center text-sm text-slate-400">No tasks match.</div>}
         {filtered.map((t) => (
           <TaskAdminRow key={t.id} task={t} isOpen={openId === t.id} onToggle={() => setOpenId(openId === t.id ? null : t.id)} role={role} />
@@ -115,20 +116,16 @@ function TaskAdminRow({ task, isOpen, onToggle, role }) {
 
   return (
     <div className="k-surface overflow-hidden">
-      <button data-testid={`admin-row-${task.id}`} onClick={onToggle} className="w-full text-left p-4 hover:bg-slate-50 flex items-center gap-3 transition-colors">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="text-[11px] text-blue-600 uppercase tracking-wide font-semibold">{task.category}</span>
-            {task.course !== "all" && <span className="text-[11px] text-slate-400 uppercase tracking-wide font-medium">{task.course} course</span>}
-            <span className="k-pill k-pill-validated">{approved.length || "—"} rules</span>
-          </div>
-          <div className="font-display font-bold text-slate-900 truncate">{task.name}</div>
-        </div>
-        <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+      <button data-testid={`admin-row-${task.id}`} aria-expanded={isOpen} onClick={onToggle} className="rules-row">
+        <span className="rules-row-name">{task.name}<span className="field-mobile-meta">{task.category} · {task.course === "all" ? "Common" : `${task.course} course`}</span></span>
+        <span className="rules-desktop ledger-muted">{task.category}</span>
+        <span className="rules-desktop ledger-muted">{task.course === "all" ? "Common" : `${task.course} course`}</span>
+        <span className="rules-desktop ledger-muted">{steps.length ? `${approved.length} approved` : "View rules"}</span>
+        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
       </button>
 
       {isOpen && (
-        <div className="border-t border-slate-200 p-4 space-y-4 bg-[#F8FAFC] k-slide-up">
+        <div className="border-t border-slate-200 p-4 space-y-4 bg-[#f7f6f2] k-slide-up">
           <div>
             <div className="flex items-center justify-between mb-2">
               <h4 className="font-display font-bold text-sm text-slate-900">Approved Validation Rules</h4>

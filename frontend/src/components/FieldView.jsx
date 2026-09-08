@@ -56,7 +56,7 @@ export default function FieldView({ job, crewName, role, query = "" }) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3 mb-5">
+      <div className="field-metrics grid grid-cols-3 gap-3 mb-5">
         <StatChip label="Rework" value={counts.rework} tone="rework" testid="stat-rework" />
         <StatChip label="In Progress" value={counts.in_progress} tone="in_progress" testid="stat-in-progress" />
         <StatChip label="Validated" value={counts.validated} tone="validated" testid="stat-validated" />
@@ -91,10 +91,11 @@ export default function FieldView({ job, crewName, role, query = "" }) {
       </div>
 
       {/* Task list */}
-      <div data-testid="task-list" className="space-y-2">
+      <div data-testid="task-list" className="field-register">
         {filtered.length === 0 && (
           <div className="text-center py-12 text-slate-400 text-sm k-surface">No tasks match these filters.</div>
         )}
+        <div className="field-register-header" aria-hidden="true"><span>Task</span><span>Status</span><span>Course</span><span>Phase</span><span>Hours / Est.</span><span className="field-progress">Progress</span><span /></div>
         {filtered.map((t) => (
           <TaskRow key={t.id} task={t} onOpen={() => setOpenTask(t)} />
         ))}
@@ -138,26 +139,15 @@ function TaskRow({ task, onOpen }) {
     <button
       data-testid={`task-row-${task.id}`}
       onClick={onOpen}
-      className="k-surface w-full p-4 text-left hover:border-slate-300 hover:shadow transition-all flex items-center gap-3 group"
+      className="field-register-row"
     >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-          <span className={`k-pill k-pill-${task.status}`}>{STATUS_LABEL[task.status]}</span>
-          {task.course !== "all" && (
-            <span className="text-[11px] text-slate-400 uppercase tracking-wide font-medium">{task.course} course</span>
-          )}
-          <span className="text-[11px] text-blue-600 uppercase tracking-wide font-semibold">{task.category}</span>
-        </div>
-        <div className="font-display font-bold text-base text-slate-900 truncate">{task.name}</div>
-        <div className="text-xs text-slate-500 mt-1 font-mono">
-          {task.actual_hours.toFixed(1)} / {task.estimated_hours?.toFixed(1) || "—"} hrs
-          {task.unit && <span className="ml-3">{task.actual_qty.toFixed(0)} / {task.estimated_qty?.toFixed(0) || "—"} {task.unit}</span>}
-        </div>
-        <div className="h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden">
-          <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
-        </div>
-      </div>
-      <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-600 shrink-0 transition-colors" />
+      <div className="field-task-name">{task.name}<span className="field-mobile-meta"><span className={`k-pill k-pill-${task.status}`}>{STATUS_LABEL[task.status]}</span><span>{task.category} · {task.course === "all" ? "Common" : `${task.course} course`}</span><span>{task.actual_hours.toFixed(1)} / {task.estimated_hours?.toFixed(1) || "—"} hrs{task.unit && ` · ${task.actual_qty.toFixed(0)} / ${task.estimated_qty?.toFixed(0) || "—"} ${task.unit}`}</span></span></div>
+      <div className="field-desktop"><span className={`k-pill k-pill-${task.status}`}>{STATUS_LABEL[task.status]}</span></div>
+      <span className="field-desktop ledger-muted">{task.course === "all" ? "Common" : task.course}</span>
+      <span className="field-desktop ledger-muted">{task.category}</span>
+      <div className="field-desktop field-task-hours">{task.actual_hours.toFixed(1)} / {task.estimated_hours?.toFixed(1) || "—"}<div className="ledger-muted mt-1">{task.unit && `${task.actual_qty.toFixed(0)} / ${task.estimated_qty?.toFixed(0) || "—"} ${task.unit}`}</div></div>
+      <div className="field-progress ledger-track" aria-label={`Progress ${Math.round(pct)}%`}><div className={barColor} style={{ width: `${pct}%` }} /></div>
+      <ChevronRight className="w-4 h-4 text-slate-400" />
     </button>
   );
 }
@@ -290,7 +280,7 @@ function TaskSheet({ task, crewName, role, onClose, onSaved }) {
           <button data-testid="close-task-sheet" onClick={onClose} className="k-btn !px-2.5 !py-2"><X className="w-5 h-5" /></button>
         </div>
 
-        <div className="p-5 space-y-6 overflow-y-auto flex-1 min-h-0 bg-[#F8FAFC]">
+        <div className="p-5 space-y-6 overflow-y-auto flex-1 min-h-0 bg-[#f7f6f2]">
           {/* Production entry */}
           <section>
             <h3 className="font-display font-bold text-slate-900 mb-3">1 · Log Production</h3>
