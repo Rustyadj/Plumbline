@@ -1,0 +1,15 @@
+http:
+  routers:
+    plumbline:
+      rule: "Host(`plumbline.srv1427612.hstgr.cloud`)"
+      entrypoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: plumbline
+
+  services:
+    plumbline:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:3003"

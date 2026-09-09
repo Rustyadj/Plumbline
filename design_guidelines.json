@@ -1,0 +1,118 @@
+{
+  "theme_mode": "light",
+  "typography": {
+    "headings": "Manrope",
+    "body": "IBM Plex Sans",
+    "sizes": {
+      "h1": "text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900",
+      "h2": "text-xl font-semibold tracking-tight text-slate-900",
+      "h3": "text-lg font-medium text-slate-900",
+      "body": "text-sm text-slate-600 leading-relaxed",
+      "label": "text-xs font-semibold tracking-[0.05em] uppercase text-slate-500"
+    }
+  },
+  "colors": {
+    "palette": {
+      "primary": "#2563EB",
+      "primary_hover": "#1D4ED8",
+      "sidebar_bg": "#0F172A",
+      "sidebar_text_active": "#FFFFFF",
+      "sidebar_text_muted": "#94A3B8",
+      "sidebar_group_title": "#64748B",
+      "background": "#F8FAFC",
+      "surface": "#FFFFFF",
+      "border": "#E2E8F0",
+      "text_main": "#0F172A",
+      "text_muted": "#64748B",
+      "danger": "#EF4444",
+      "success": "#10B981",
+      "warning": "#F59E0B"
+    }
+  },
+  "layouts": {
+    "app_shell": "flex h-screen bg-slate-50 overflow-hidden font-sans",
+    "sidebar": {
+      "expanded": "w-64 flex flex-col bg-slate-900 border-r border-slate-800 transition-all duration-300 z-20 shrink-0",
+      "collapsed": "w-16 flex flex-col bg-slate-900 border-r border-slate-800 transition-all duration-300 z-20 shrink-0 items-center",
+      "grouping_strategy": "Use section headers (OVERVIEW, FIELD, ADMIN) with text-xs tracking-wider uppercase text-slate-500 mt-6 mb-2 px-4. When collapsed, hide headers or show a thin horizontal divider."
+    },
+    "top_bar": "h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 sticky top-0 z-10 w-full shrink-0 shadow-sm",
+    "main_content": "flex-1 overflow-auto flex flex-col relative bg-slate-50",
+    "content_container": "p-6 md:p-8 max-w-7xl mx-auto w-full flex-1 flex flex-col gap-6"
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-blue-600 hover:bg-blue-700 text-white rounded-md px-4 py-2 text-sm font-medium transition-colors shadow-sm inline-flex items-center justify-center gap-2",
+      "secondary": "bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-md px-4 py-2 text-sm font-medium transition-colors shadow-sm inline-flex items-center justify-center gap-2",
+      "ghost": "hover:bg-slate-100 text-slate-600 rounded-md px-4 py-2 text-sm font-medium transition-colors inline-flex items-center justify-center gap-2"
+    },
+    "cards": {
+      "kpi": "bg-white border border-slate-200 rounded-lg p-5 shadow-sm hover:shadow transition-shadow flex flex-col",
+      "container": "bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden"
+    },
+    "data_tables": {
+      "container": "w-full border-collapse bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm",
+      "header_row": "bg-slate-50 border-b border-slate-200 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider",
+      "header_cell": "px-4 py-3 align-middle",
+      "body_row": "border-b border-slate-100 hover:bg-slate-50/80 transition-colors group",
+      "body_cell": "px-4 py-3 align-middle text-sm text-slate-700 font-medium whitespace-nowrap"
+    },
+    "status_pills": {
+      "base": "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border",
+      "success": "bg-emerald-50 text-emerald-700 border-emerald-200",
+      "warning": "bg-amber-50 text-amber-700 border-amber-200",
+      "danger": "bg-red-50 text-red-700 border-red-200",
+      "info": "bg-blue-50 text-blue-700 border-blue-200",
+      "neutral": "bg-slate-100 text-slate-700 border-slate-200"
+    }
+  },
+  "visual_enhancers": {
+    "icons": "lucide-react",
+    "shadows": "Keep shadows very minimal and crisp (e.g., shadow-sm). Rely on 1px borders (border-slate-200) to separate elements rather than large drop shadows, mimicking dense corporate SaaS.",
+    "border_radius": "rounded-md for buttons/inputs, rounded-lg for cards/tables."
+  },
+  "image_urls": {
+    "user_avatars": [
+      {
+        "url": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MjJ8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBhdmF0YXIlMjBoZWFkc2hvdHxlbnwwfHx8fDE3ODgxNTc4NTN8MA&ixlib=rb-4.1.0&q=85",
+        "description": "man in black button-up shirt",
+        "category": "user avatar"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MjJ8MHwxfHNlYXJjaHwyfHxwcm9mZXNzaW9uYWwlMjBhdmF0YXIlMjBoZWFkc2hvdHxlbnwwfHx8fDE3ODgxNTc4NTN8MA&ixlib=rb-4.1.0&q=85",
+        "description": "closeup photography of woman smiling",
+        "category": "user avatar"
+      }
+    ],
+    "construction_banners": [
+      {
+        "url": "https://images.unsplash.com/photo-1742112125567-3e8967bad60f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzl8MHwxfHNlYXJjaHwxfHxjb25zdHJ1Y3Rpb24lMjBzaXRlJTIwbWFuYWdlciUyMGNsaXBib2FyZHxlbnwwfHx8fDE3ODgxNTc4NTR8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Construction workers review plans at a job site",
+        "category": "hero or placeholder"
+      }
+    ]
+  },
+  "accessibility": {
+    "data_testid": "MANDATORY. Add descriptive, role-based kebab-case data-testid attributes to all interactive elements, buttons, links, inputs, and major containers (e.g., 'sidebar-nav-item', 'topbar-search-input', 'roi-metric-card').",
+    "contrast": "Ensure all text meets minimum WCAG AA 4.5:1 ratio. The navy sidebar (#0F172A) with white text provides excellent contrast."
+  },
+  "instructions_to_main_agent": {
+    "1_layout_structure": "Build a responsive App Shell. Sidebar on the left (navy bg), Top Bar on the top (white bg, global search, user avatar). Main content area occupies remaining space. Sidebar must include a toggle button (e.g. at the bottom or top right of sidebar) to collapse between w-64 and w-16. Use React state to manage this collapse.",
+    "2_sidebar_navigation": "Group sidebar links into exactly these sections: OVERVIEW (Dashboard, Live Feed), FIELD (Tasks, Field View), ADMIN (Jobs, Settings). Show uppercase small group headers when expanded. Hide group headers and just show icons when collapsed.",
+    "3_dashboard": "The Dashboard must feature an 'ROI hero metric' card prominently at the top. Followed by a grid of smaller KPI tiles. Below that, implement charts using 'recharts' and a 'Foreman Leaderboard' table.",
+    "4_field_view": "Create a mobile-friendly view mimicking the field app. Use dense task lists with status pills. Simulate a 'Validation Checklist' sheet/modal and a 'Photo Capture' placeholder.",
+    "5_admin_panels": "Build Super Admin panels with dense data tables. Jobs CRUD, Tasks CRUD with checkboxes for multi-select bulk re-categorize, 'Common Mistakes' list, and a Danger Zone for resets.",
+    "6_csv_importer": "Build a CSV/Excel importer modal with a full de-selectable task preview table (dense rows, checkboxes on the left).",
+    "7_fonts_and_styling": "Completely remove Barlow Condensed and the #FF5F15 orange / #CCFF00 yellow dark theme. Apply the new Corporate SaaS palette (Light background, Navy sidebar, Blue accents). Import Manrope for headings and IBM Plex Sans for body text to achieve the clean SaaS look. Use standard .js files for React components (NOT .tsx)."
+  },
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "Prioritize using pre-existing components from src/components/ui when applicable.",
+    "Create new components that match the style and conventions of existing components when needed.",
+    "You MUST NOT center align the app container, i.e. do not add `.App { text-align: center; }` in the css file.",
+    "Every interaction needs micro-animations - hover states, transitions, focus rings.",
+    "Use 2-3x more spacing than feels comfortable inside layouts, but keep data tables dense as requested.",
+    "Use sonner for toasts.",
+    "NEVER use placeholder URLs (via.placeholder.com). Use the provided image_urls.",
+    "Do not use transparent backgrounds over content; use solid whites (bg-white) or greys (bg-slate-50) in light mode."
+  ]
+}

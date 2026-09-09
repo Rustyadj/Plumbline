@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 2 PLUMBLINE re-test: all new admin features pass. Backend 10/10 pytest cases pass (root→PLUMBLINE, settings GET/PATCH auto-create, settings cost flows into dashboard ROI, jobs CRUD with cascade, tasks CRUD with cascade, common-mistakes create/filter/delete, dashboard leaderboard shape + sort, admin/reset wipes & reseeds 115 tasks while keep_settings=true preserves settings, final /seed idempotent). Frontend: Onboarding shows PLUMBLINE 5xl orange + 'BUILD TO THE PLUMBLINE. ZERO REWORK.' tagline (gold). Manager lands on Command (dashboard) — default-view fix verified. Admin tab visible only for manager (crew has no tab-admin, lands on Field). SuperAdmin shows all 5 sections (admin-section-{settings,jobs,tasks,mistakes,danger}); Settings save persists (verified cost 850→1500 via API, then restored to 850); Jobs panel has create/edit/delete with 1 job; Tasks panel: 115 tasks render, search filters to 37 'install', task-create/edit/save/delete testids present; Mistakes panel: add-btn + 7 delete-{id} rows; Danger Zone admin-reset-btn present and visible. ROI cost-per-check on dashboard reflects current settings value.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard (empty state)", "issues": ["After admin/reset, dashboard shows ROI tile '$0' with stat squares 0/0/$0.0k — visually correct but the empty 30-day chart line sits flush on the $0 baseline. Cosmetic only; populates once entries exist."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_plumbline_admin.py",
+    "/app/backend/tests/test_kreteops_api.py",
+    "/app/test_reports/pytest/iter2_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py /api/admin/reset accepts keep_settings as a query param (FastAPI default True). Confirmed via test that settings.rework_cost_per_check=999 is preserved across reset. Good.",
+    "get_settings() auto-creates the singleton on first GET — robust, no 404 ever. Patch uses upsert so even a clean DB works.",
+    "Dashboard ROI now reads cost_per_check and photo_audit_value from settings on EVERY call. Recompute on settings change confirmed live.",
+    "Leaderboard sort is stable & desc by score; pass_rate computed safely (guards /0). Score formula: pr*100 + log(failed+1)*12 + log(photos+1)*6 — rewards both quality and engagement.",
+    "Job & Task DELETE cascades verified (validation-steps and task_entries wiped). Good data hygiene.",
+    "Common-mistakes filter by category works; category param is exact-match (case-sensitive). Document or normalize if free-text categories are added later.",
+    "test_kreteops_api.py iteration-1 file had a hardcoded fallback URL in BASE_URL default — fixed test_root assertion to 'PLUMBLINE'. Kept the fallback (not blocking) but new iter-2 test file uses os.environ[...] without default per env policy.",
+    "Frontend default-view derived from localStorage role at App.js mount works for both manager (→ dashboard) and crew (→ field). Verified.",
+    "All required data-testids present: tab-admin, super-admin, admin-section-*, settings-cost-per-check, settings-photo-value, settings-save-btn, job-create-btn, job-edit-*, job-save-btn, job-delete-*, admin-tasks-search, task-create-btn, task-edit-*, task-save-btn, task-delete-*, mistake-add-btn, mistake-delete-*, admin-reset-btn, leaderboard, lb-row-*."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_kreteops_api.py (updated test_root: KreteOps → PLUMBLINE)",
+    "/app/backend/tests/test_plumbline_admin.py (new — 9 tests covering iter-2 features)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "No auth. localStorage keys: kreteops_role (crew|manager), kreteops_name (any string). Used 'Test Mgr 2026' (manager) and 'Test Crew 2026' (crew).",
+  "seed_data_creation": "After final /api/admin/reset test the demo was re-seeded automatically (115 tasks, default validation steps, common mistakes). zzz_final_seed_idempotent confirms 115 tasks present. Settings restored to default rework_cost_per_check=850, photo_audit_value=75 at end of UI run via PATCH.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: `REACT_APP_BACKEND_URL=<url> pytest /app/backend/tests/ -v`. Both test files green. /api/admin/reset takes ~1s; AI tests in iter-1 file may need 90s timeout. Dashboard leaderboard ONLY renders when entries>0 — after a reset the section is hidden by design. To exercise leaderboard UI, create a task_entry first via FieldView or curl. Iter-2 reset clears all task_entries, so iter-1 TEST_ entries from the previous run are gone (expected, per problem statement).",
+  "rca of the issue": "N/A — no bugs found across all iter-2 features."
+}
