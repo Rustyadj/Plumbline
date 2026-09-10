@@ -228,24 +228,16 @@ function JobsPanel({ job, onChanged, onImported, onGoTasks }) {
       {importing && <ImportDialog onClose={() => setImporting(false)} onDone={async (newJobId) => { await load(); if (newJobId) await onImported?.(newJobId); setImporting(false); onGoTasks?.(); }} />}
       {creating && <JobEditor onSave={create} onCancel={() => setCreating(false)} isNew />}
 
-      <div className="space-y-2">
-        {jobs.map((j) => (
-          editing === j.id ? (
-            <JobEditor key={j.id} initial={j} onSave={save} onCancel={() => setEditing(null)} />
-          ) : (
-            <div key={j.id} className="k-surface p-4 flex items-center gap-3" data-testid={`admin-job-${j.id}`}>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-display font-bold text-slate-900">{j.name}</span>
-                  <span className={`k-pill k-pill-${j.status === "active" ? "in_progress" : j.status === "complete" ? "validated" : "not_started"}`}>{j.status}</span>
-                </div>
-                <div className="text-xs text-slate-500 font-mono">{j.location || "—"} · {j.client || "—"} · Budget: {j.budget_hours}h</div>
-              </div>
-              <button data-testid={`job-edit-${j.id}`} onClick={() => setEditing(j.id)} className="k-btn !px-2 !py-2"><Edit3 className="w-4 h-4" /></button>
-              <button data-testid={`job-delete-${j.id}`} onClick={() => remove(j.id)} className="k-btn k-btn-danger !px-2 !py-2"><Trash2 className="w-4 h-4" /></button>
-            </div>
-          )
-        ))}
+      {editing && <JobEditor key={editing} initial={jobs.find(j => j.id === editing)} onSave={save} onCancel={() => setEditing(null)} />}
+      <div className="ledger-scroll" role="region" aria-label="Jobs registry" tabIndex={0}>
+        <table className="ledger-table"><thead><tr><th scope="col">Job</th><th scope="col">Status</th><th scope="col">Location</th><th scope="col">Client</th><th scope="col" className="numeric">Budget hours</th><th scope="col">Actions</th></tr></thead>
+          <tbody>{jobs.map(j => <tr key={j.id} data-testid={`admin-job-${j.id}`}>
+            <th scope="row">{j.name}</th><td><span className={`k-pill k-pill-${j.status === "active" ? "in_progress" : j.status === "complete" ? "validated" : "not_started"}`}>{j.status}</span></td>
+            <td>{j.location || "—"}</td><td>{j.client || "—"}</td><td className="numeric">{j.budget_hours}</td>
+            <td><div className="flex gap-2"><button aria-label={`Edit ${j.name}`} data-testid={`job-edit-${j.id}`} onClick={() => setEditing(j.id)} className="k-btn !px-2 !py-2"><Edit3 className="w-4 h-4" /></button><button aria-label={`Delete ${j.name}`} data-testid={`job-delete-${j.id}`} onClick={() => remove(j.id)} className="k-btn k-btn-danger !px-2 !py-2"><Trash2 className="w-4 h-4" /></button></div></td>
+          </tr>)}</tbody>
+        </table>
+        {!jobs.length && <p className="ledger-empty">No jobs yet. Create or import a job to begin.</p>}
       </div>
     </div>
   );

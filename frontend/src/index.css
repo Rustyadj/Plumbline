@@ -5,15 +5,15 @@
 @tailwind utilities;
 
 :root {
-  --primary: #2563EB;
-  --primary-hover: #1D4ED8;
+  --primary: #bd402b;
+  --primary-hover: #a43120;
   --sidebar: #0F172A;
   --sidebar-2: #1E293B;
-  --bg: #F8FAFC;
+  --bg: #f7f6f2;
   --surface: #FFFFFF;
-  --border: #E2E8F0;
-  --text: #0F172A;
-  --text-muted: #64748B;
+  --border: #dedfd7;
+  --text: #252821;
+  --text-muted: #6f7267;
   --text-faint: #94A3B8;
   --danger: #EF4444;
   --success: #10B981;

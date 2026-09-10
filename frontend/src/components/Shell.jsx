@@ -19,6 +19,12 @@ export default function Shell({ view, adminSection, onNavigate, role, crewName, 
   }, []);
   React.useEffect(() => { loadJobs(); }, [loadJobs]);
 
+  React.useEffect(() => {
+    const close = (e) => { if (e.key === "Escape") { setMobileOpen(false); setJobOpen(false); } };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, []);
+
   const toggleCollapse = () => {
     const next = !collapsed;
     setCollapsed(next);
@@ -68,16 +74,16 @@ export default function Shell({ view, adminSection, onNavigate, role, crewName, 
 
   const Sidebar = (
     <aside
-      className={`${collapsed ? "w-16" : "w-64"} bg-[#0F172A] flex flex-col shrink-0 transition-[width] duration-300 h-full`}
+      className={`${collapsed ? "w-16" : "w-[216px]"} ledger-sidebar flex flex-col shrink-0 transition-[width] duration-300 h-full`}
       data-testid="sidebar"
     >
       <div className={`h-16 flex items-center ${collapsed ? "justify-center" : "px-5"} border-b border-slate-800 shrink-0`}>
-        <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
-          <ShieldCheck className="w-[18px] h-[18px] text-white" strokeWidth={2.5} />
+        <div className="w-8 h-8 rounded-lg ledger-brand-icon flex items-center justify-center shrink-0">
+          <ShieldCheck className="w-[18px] h-[18px] text-current" strokeWidth={1.5} />
         </div>
         {!collapsed && (
           <div className="ml-3 leading-none">
-            <div className="font-display font-extrabold text-white text-[17px] tracking-tight">PLUMBLINE</div>
+            <div className="font-display font-extrabold text-[17px] tracking-tight">PLUMBLINE</div>
             <div className="text-[10px] text-slate-500 font-mono mt-0.5">ZERO REWORK</div>
           </div>
         )}
@@ -94,6 +100,7 @@ export default function Shell({ view, adminSection, onNavigate, role, crewName, 
                 <div
                   key={it.id}
                   data-testid={`nav-${it.id}`}
+                  aria-current={isActive(it) ? "page" : undefined}
                   role="button"
                   tabIndex={0}
                   onClick={() => go(it)}
@@ -111,6 +118,7 @@ export default function Shell({ view, adminSection, onNavigate, role, crewName, 
       </nav>
 
       <button
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         data-testid="sidebar-collapse"
         onClick={toggleCollapse}
         className={`hidden md:flex items-center gap-2 text-slate-400 hover:text-white text-sm px-5 h-12 border-t border-slate-800 shrink-0 ${collapsed ? "justify-center px-0" : ""}`}
@@ -121,7 +129,8 @@ export default function Shell({ view, adminSection, onNavigate, role, crewName, 
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F8FAFC] text-slate-900">
+    <div className="ledger-shell flex h-screen overflow-hidden">
+      <a className="ledger-skip" href="#main-content">Skip to content</a>
       {/* Desktop sidebar */}
       <div className="hidden md:flex h-full">{Sidebar}</div>
 
@@ -135,17 +144,17 @@ export default function Shell({ view, adminSection, onNavigate, role, crewName, 
 
       <div className="flex-1 flex flex-col min-w-0 h-full">
         {/* Top bar */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center gap-3 px-4 md:px-6 shrink-0 z-20">
-          <button data-testid="mobile-menu-btn" onClick={() => setMobileOpen(true)} className="md:hidden k-btn !px-2.5 !py-2">
+        <header className="ledger-topbar h-16 border-b border-slate-200 flex items-center gap-3 px-4 md:px-6 shrink-0 z-20">
+          <button aria-label="Open navigation" data-testid="mobile-menu-btn" onClick={() => setMobileOpen(true)} className="md:hidden k-btn !px-2.5 !py-2">
             <PanelLeftOpen className="w-4 h-4" />
           </button>
 
           {/* Job switcher */}
           <div className="relative">
             <button
-              data-testid="job-switcher"
+              aria-expanded={jobOpen} data-testid="job-switcher"
               onClick={() => { loadJobs(); setJobOpen(!jobOpen); }}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors max-w-[46vw] md:max-w-none"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors max-w-[28vw] sm:max-w-[46vw] md:max-w-none"
             >
               <span className="w-2 h-2 bg-emerald-500 rounded-full k-pulse shrink-0" />
               <span className="font-display font-bold text-sm truncate">{job?.name || "No job"}</span>
@@ -175,11 +184,11 @@ export default function Shell({ view, adminSection, onNavigate, role, crewName, 
           </div>
 
           {/* Search */}
-          <div className="flex-1 max-w-xl hidden sm:block">
+          {searchable && <div className="flex-1 max-w-xl hidden sm:block">
             <div className="relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
-                data-testid="topbar-search"
+                aria-label="Search tasks" data-testid="topbar-search"
                 value={query}
                 onChange={(e) => onQuery(e.target.value)}
                 placeholder={searchable ? "Search tasks…" : "Search…"}
@@ -189,11 +198,12 @@ export default function Shell({ view, adminSection, onNavigate, role, crewName, 
             </div>
           </div>
 
-          <div className="flex-1 sm:hidden" />
+          }
+          <div className={searchable ? "flex-1 sm:hidden" : "flex-1"} />
 
           {role === "manager" && (
             <button
-              data-testid="topbar-new-btn"
+              aria-label="New Job" data-testid="topbar-new-btn"
               onClick={() => onNavigate("admin", "jobs")}
               className="k-btn k-btn-primary !py-2"
             >
@@ -206,19 +216,20 @@ export default function Shell({ view, adminSection, onNavigate, role, crewName, 
               <div className="text-sm font-semibold text-slate-900">{crewName}</div>
               <div className="text-[11px] text-slate-500">{role === "manager" ? "Manager" : "Field Crew"}</div>
             </div>
-            <div className="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold shrink-0">
+            <div className="w-9 h-9 rounded-full bg-[#34382f] text-white flex items-center justify-center text-xs font-bold shrink-0">
               {initials}
             </div>
-            <button data-testid="logout-btn" onClick={onLogout} title="Switch role" className="k-btn !px-2.5 !py-2 !shadow-none">
+            <button aria-label="Switch role" data-testid="logout-btn" onClick={onLogout} title="Switch role" className="k-btn !px-2.5 !py-2 !shadow-none">
               <LogOut className="w-4 h-4" />
             </button>
           </div>
         </header>
 
         <OfflineBanner />
+        {searchable && <div className="sm:hidden px-4 py-2 border-b border-slate-200"><input aria-label="Search tasks" className="k-input" placeholder="Search tasks…" value={query} onChange={(e) => onQuery(e.target.value)} /></div>}
 
-        <main className="flex-1 overflow-auto">
-          <div className="p-4 md:p-8 max-w-[1500px] mx-auto w-full">{children}</div>
+        <main className="flex-1 overflow-auto" id="main-content" tabIndex={-1}>
+          <div className="ledger-content p-4 md:p-8 max-w-[1700px] mx-auto w-full">{children}</div>
         </main>
       </div>
     </div>
